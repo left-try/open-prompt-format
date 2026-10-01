@@ -1,0 +1,42 @@
+{
+  "name": "open-prompt-format",
+  "version": "0.1.0",
+  "description": "Load and render Open Prompt Format files",
+  "license": "MIT",
+  "keywords": ["prompt", "llm", "prompt-format", "prompt-management"],
+  "files": ["dist", "README.md", "LICENSE"],
+  "publishConfig": {
+    "access": "public"
+  },
+  "homepage": "https://left-try.github.io/open-prompt-format/",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/left-try/open-prompt-format.git"
+  },
+  "bugs": {
+    "url": "https://github.com/left-try/open-prompt-format/issues"
+  },
+  "type": "module",
+  "engines": {
+    "node": ">=22.6.0"
+  },
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "node --experimental-strip-types --test test/*.test.js"
+  },
+  "dependencies": {
+    "yaml": "2.9.1"
+  },
+  "devDependencies": {
+    "@types/node": "22.20.1",
+    "typescript": "5.9.3"
+  }
+}

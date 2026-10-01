@@ -1,0 +1,29 @@
+{
+  "valid": [
+    {
+      "file": "prompts/conformance.sample.md",
+      "inputs": {
+        "customer_message": "My {{literal}} text says: ## user"
+      },
+      "expected": [
+        {
+          "role": "system",
+          "content": "Respond to the customer. Preserve the supplied text literally."
+        },
+        {
+          "role": "developer",
+          "content": "Use a helpful tone."
+        },
+        {
+          "role": "user",
+          "content": "Customer says: My {{literal}} text says: ## user\n\nThis heading is content:\n### user\n\n```md\n## assistant\nThat heading is inside a code fence.\n```\n\n## assistant"
+        }
+      ]
+    }
+  ],
+  "invalid": [
+    "prompts/invalid-duplicate-key.md",
+    "prompts/invalid-unknown-input.md",
+    "prompts/invalid-template.md"
+  ]
+}

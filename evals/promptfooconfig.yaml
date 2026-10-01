@@ -1,0 +1,15 @@
+description: Evaluate the checked-in OPF prompt against multiple providers.
+
+prompts:
+  - file://../adapters/promptfoo.cjs
+
+providers:
+  - openai:gpt-4.1-mini
+  - anthropic:messages:claude-haiku-4-5-20251001
+
+tests:
+  - vars:
+      customer_message: "My order is late. Can you tell me what to do?"
+
+env:
+  OPF_PROMPT_FILE: examples/support.reply.md
