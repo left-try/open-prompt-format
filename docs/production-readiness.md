@@ -2,9 +2,11 @@
 
 Status: local release workflow and both SDKs' real Git paths are exercised; external publication still needs a live service check.
 
-The v0.3 specification, compatibility reports, repository scanner, and initial local migration adapters are experimental additions. This implementation turn did not run automated tests or builds. Do not interpret the older evidence below as verification of the v0.3 and migration changes.
+The v0.3 specification, compatibility reports, repository scanner, migration adapters, and the new init/check/diff workflows are experimental. Their behavior requires verification before production use. Do not interpret older evidence below as verification of these additions.
 
 ## Evidence in this repository
+
+The Python CLI includes `opf init`, `opf check`, and `opf diff`. Static safety checks are advisory only. Prefix comparison describes cacheability evidence and never confirms a provider cache hit.
 
 - Python integration tests create a temporary Git repository, release a prompt, promote a channel, render the tagged source after the working file changes, export and reload a bundle, and reject altered bundles, moved tags, and bad channel digests.
 - The Jinja test covers a static include and rejects a dynamic include during release.

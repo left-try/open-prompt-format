@@ -8,7 +8,7 @@ Make a prompt stored in one repository file portable across Python and TypeScrip
 
 The current v0.1/v0.2 parser and renderer are a foundation. The local Git-backed registry now has one human-maintained `opf.yaml`, Git-tagged releases verified by bundle digest, local resolution by version or channel, render receipts, portable export, and an initial explicit Langfuse publication adapter. Other provider adapters remain planned. See [the registry contract](spec/REGISTRY.md), [registry RFC](docs/registry-rfc.md), and [versioning RFC](docs/versioning-rfc.md). Model selection stays in application or deployment configuration, outside the required prompt schema.
 
-The v0.3 extension/provenance draft and local migration preview/apply commands are implemented experimentally. Current adapters are listed in the README; parity, automated validation, and independent-user review remain open before stability.
+The v0.3 extension/provenance draft, local migration preview/apply commands, and Python `opf init`, `opf check`, and `opf diff` workflows are experimental. The latter provide best-effort safety advisories and stable-prefix cacheability evidence, not security guarantees or provider cache-hit confirmation. Current adapters are listed in the README; automated validation and independent-user review remain open before stability.
 
 Prioritize a usable Python path that can register existing `.md` and `.j2` prompts without migration. Publishing must report provider capability gaps before writing and must never silently change the meaning of a prompt. The canonical bundle must remain exportable even when a particular remote provider cannot execute it.
 

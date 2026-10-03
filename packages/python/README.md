@@ -51,3 +51,10 @@ print(prepared.receipt)
 The registry also supports `release`, `promote`, `verify`, `verify-all`, and `export` through the `opf` CLI. Run `opf verify-all --registry opf.yaml` in CI after fetching Git tags. `Registry.from_bundle("prompt.json")` loads an exported release without Git. Existing Markdown/Jinja projects can use the `jinja2` renderer with `pip install 'open-prompt-format[jinja]'`. The model is selected by the application and can be attached with `prepared.call_receipt(provider=..., model=...)`. See the [registry contract](../../spec/REGISTRY.md).
 
 After `opf publish ID@VERSION --to langfuse`, `Registry.langfuse().get(ID, version=VERSION)` explicitly loads the verified remote bundle using Langfuse credentials from the environment.
+
+
+## CLI onboarding and review
+
+The Python distribution includes the `opf` CLI. `opf init . --id support.reply` creates a sample prompt, registry entry, and an OPF-owned guidance block in `AGENTS.md`. It does not replace existing prompt files or content outside its markers. `opf check .` validates discovered OPF prompts and registry references locally; `--format json` and `--strict` are available for CI.
+
+Use `opf diff ID --base VERSION_OR_CHANNEL --target VERSION_OR_WORKING_TREE` to inspect source changes and shared prefix evidence. A stable prefix is only a cacheability candidate; it cannot establish a provider cache hit. Heuristic injection findings need human review and do not guarantee safety.

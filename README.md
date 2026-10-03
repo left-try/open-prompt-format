@@ -38,6 +38,26 @@ Do not invent order details.
 
 The message and input rules are shared by `opf/0.2` and the experimental [v0.3 draft](spec/SYNTAX-0.3.md). v0.3 adds namespaced extension records and compatibility reports; older prompts retain their existing interpretation. Frontmatter schemas are available for [v0.1](spec/frontmatter.schema.json), [v0.2](spec/frontmatter-0.2.schema.json), and [v0.3](spec/frontmatter-0.3.schema.json).
 
+## Start and check a prompt project
+
+The Python package also installs the `opf` command. Create a starter prompt, registry entry, and OPF guidance in `AGENTS.md`:
+
+```sh
+python -m pip install ./packages/python
+opf init . --id support.reply
+opf check .
+```
+
+`opf init` preserves existing files and only manages its marked section in `AGENTS.md`; use `--agents no` to skip agent guidance. `opf check --format json` is suitable for CI. Safety findings are heuristic advisories, not a prompt-injection guarantee.
+
+Compare a release with the current working tree:
+
+```sh
+opf diff support.reply --base 1.0.0 --target working-tree
+```
+
+The report identifies a stable shared message prefix as evidence that a provider cache may be usable. It does not claim a cache hit; only provider runtime signals can confirm that.
+
 ## Find and migrate existing prompts
 
 The Python CLI can scan a repository and preview a conversion locally. A preview does not write files:

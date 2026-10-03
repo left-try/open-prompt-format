@@ -3,17 +3,38 @@
 import argparse
 import json
 import sys
+from pathlib import Path
 
 from .core import OPFError, load, load_collection
 from .registry import Registry
 from .publish import langfuse_plan, publish_langfuse
 from .discovery import scan
 from .migrate import apply_migration, plan_migration
+from .check import check as run_check
+from .init import initialize
+from .diff import compare as compare_prompts
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(prog="opf")
     sub = parser.add_subparsers(dest="command", required=True)
+    init_cmd = sub.add_parser("init", help="create an OPF starter prompt and agent guidance")
+    init_cmd.add_argument("path", nargs="?", default=".")
+    init_cmd.add_argument("--id", default="example.prompt")
+    init_cmd.add_argument("--prompt", default="prompts/example.prompt.md")
+    init_cmd.add_argument("--agents", choices=["auto", "yes", "no"], default="auto")
+    check_cmd = sub.add_parser("check", help="validate prompts and registry locally")
+    check_cmd.add_argument("path", nargs="?", default=".")
+    check_cmd.add_argument("--registry")
+    check_cmd.add_argument("--format", choices=["text", "json"], default="text")
+    check_cmd.add_argument("--strict", action="store_true", help="treat warnings as failures")
+    check_cmd.add_argument("--no-safety", action="store_true", help="skip heuristic safety advisories")
+    diff_cmd = sub.add_parser("diff", help="compare prompt releases and report stable-prefix evidence")
+    diff_cmd.add_argument("id")
+    diff_cmd.add_argument("--base", required=True, help="release version or channel:NAME")
+    diff_cmd.add_argument("--target", required=True, help="release version, channel:NAME, or working-tree")
+    diff_cmd.add_argument("--registry", default="opf.yaml")
+    diff_cmd.add_argument("--format", choices=["text", "json"], default="text")
     discover = sub.add_parser("scan", help="find likely prompt sources without changing files")
     discover.add_argument("path", nargs="?", default=".")
     discover.add_argument("--format", choices=["text", "json"], default="text")
@@ -77,6 +98,45 @@ def main() -> None:
     publish.add_argument("--dry-run", action="store_true", help="show compatibility and payload without a network request")
     args = parser.parse_args()
     try:
+        if args.command == "init":
+            result = initialize(args.path, prompt_id=args.id, prompt_path=args.prompt, update_agents=args.agents != "no")
+            print(json.dumps(result.to_dict(), ensure_ascii=False, indent=2))
+            return
+        if args.command == "check":
+            root = Path(args.path).resolve()
+            registry_path = args.registry
+            if registry_path and not Path(registry_path).is_absolute():
+                registry_path = root / registry_path
+            findings = run_check(root, registry_path=registry_path, safety=not args.no_safety)
+            if args.format == "json":
+                print(json.dumps([item.to_dict() for item in findings], ensure_ascii=False, indent=2))
+            else:
+                for item in findings:
+                    location = item.path or "<project>"
+                    if item.line is not None:
+                        location += ":{}".format(item.line)
+                        if item.column is not None:
+                            location += ":{}".format(item.column)
+                    print("{} {} {}: {}".format(item.severity.upper(), item.code, location, item.message))
+                errors = sum(item.severity == "error" for item in findings)
+                warnings = sum(item.severity == "warning" for item in findings)
+                print("{} error(s), {} warning(s)".format(errors, warnings))
+            if any(item.severity == "error" for item in findings) or args.strict and findings:
+                raise SystemExit(2)
+            return
+        if args.command == "diff":
+            report = compare_prompts(args.id, args.base, args.target, registry_path=args.registry)
+            if args.format == "json":
+                print(json.dumps(report.to_dict(), ensure_ascii=False, indent=2))
+            else:
+                print("{}: {} -> {} ({})".format(report.id, report.base, report.target, "changed" if report.changed else "unchanged"))
+                for change in report.changes:
+                    print("- {}: {}".format(change["kind"], json.dumps(change, ensure_ascii=False)))
+                print("stable leading messages: {}".format(report.stable_prefix_messages if report.stable_prefix_messages is not None else "unknown"))
+                print("cacheability evidence: {} (not a provider cache-hit claim)".format(report.cacheability))
+                for note in report.limitations:
+                    print("note: {}".format(note))
+            return
         if args.command == "validate-collection":
             prompts = load_collection(args.directory)
             print("valid: {} prompt(s)".format(len(prompts)))
