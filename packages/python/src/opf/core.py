@@ -1,15 +1,18 @@
-"""Parsing and rendering for the proposed OPF 0.1 syntax."""
+"""Parsing and rendering for OPF 0.1 and the versionless OPF 0.2 syntax."""
 
 from __future__ import annotations
 
 import hashlib
 import copy
+import math
 import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple
 
 import yaml
+
+from .compatibility import CompatibilityFinding, CompatibilityReport
 
 
 class OPFError(ValueError):
@@ -112,14 +115,18 @@ def _validate_metadata(metadata: dict) -> None:
     unknown = set(metadata) - allowed
     if unknown:
         raise OPFError("unknown frontmatter field(s): {}".format(", ".join(sorted(map(str, unknown)))))
-    for field in ("format", "id", "version"):
+    for field in ("format", "id"):
         if field not in metadata:
             raise OPFError("missing required frontmatter field: {}".format(field))
-    if metadata["format"] != "opf/0.1":
-        raise OPFError("unsupported format {!r}; expected 'opf/0.1'".format(metadata["format"]))
+    if metadata["format"] not in {"opf/0.1", "opf/0.2", "opf/0.3"}:
+        raise OPFError("unsupported format {!r}; expected 'opf/0.1', 'opf/0.2', or 'opf/0.3'".format(metadata["format"]))
+    if metadata["format"] == "opf/0.1" and "version" not in metadata:
+        raise OPFError("missing required frontmatter field: version")
+    if metadata["format"] in {"opf/0.2", "opf/0.3"} and "version" in metadata:
+        raise OPFError("{} keeps release versions in the registry; remove frontmatter version".format(metadata["format"]))
     if not isinstance(metadata["id"], str) or not ID_RE.fullmatch(metadata["id"]):
         raise OPFError("id must match [a-z0-9]+(?:[._-][a-z0-9]+)*")
-    if not isinstance(metadata["version"], str) or not VERSION_RE.fullmatch(metadata["version"]):
+    if "version" in metadata and (not isinstance(metadata["version"], str) or not VERSION_RE.fullmatch(metadata["version"])):
         raise OPFError("version must be SemVer MAJOR.MINOR.PATCH without build metadata")
     if "description" in metadata and not isinstance(metadata["description"], str):
         raise OPFError("description must be a string")
@@ -143,8 +150,67 @@ def _validate_metadata(metadata: dict) -> None:
             raise OPFError("input {!r} must declare type: string".format(name))
         if "required" in spec and not isinstance(spec["required"], bool):
             raise OPFError("input {!r} required must be a boolean".format(name))
-    if "extensions" in metadata and not isinstance(metadata["extensions"], dict):
-        raise OPFError("extensions must be a mapping")
+    if "extensions" in metadata:
+        if not isinstance(metadata["extensions"], dict):
+            raise OPFError("extensions must be a mapping")
+        if metadata["format"] == "opf/0.3":
+            _validate_extensions(metadata["extensions"])
+
+
+EXTENSION_ID_RE = re.compile(r"^[a-z][a-z0-9]*(?:[.-][a-z0-9]+)+$")
+EXTENSION_VERSION_RE = re.compile(r"^[!-~]{1,64}$")
+
+
+def _validate_json_value(value: Any, path: str, active: set[int]) -> None:
+    if value is None or isinstance(value, (str, bool, int)):
+        return
+    if isinstance(value, float):
+        if not math.isfinite(value):
+            raise OPFError("{} must not contain a non-finite number".format(path))
+        return
+    if isinstance(value, list):
+        identity = id(value)
+        if identity in active:
+            raise OPFError("{} must not contain cyclic YAML aliases".format(path))
+        active.add(identity)
+        try:
+            for index, item in enumerate(value):
+                _validate_json_value(item, "{}[{}]".format(path, index), active)
+        finally:
+            active.remove(identity)
+        return
+    if isinstance(value, dict):
+        identity = id(value)
+        if identity in active:
+            raise OPFError("{} must not contain cyclic YAML aliases".format(path))
+        active.add(identity)
+        try:
+            for key, item in value.items():
+                if not isinstance(key, str):
+                    raise OPFError("{} must use string mapping keys".format(path))
+                _validate_json_value(item, "{}.{}".format(path, key), active)
+        finally:
+            active.remove(identity)
+        return
+    raise OPFError("{} contains a value that is not JSON-compatible".format(path))
+
+
+def _validate_extensions(extensions: dict) -> None:
+    for identifier, record in extensions.items():
+        if not isinstance(identifier, str) or len(identifier.encode("utf-8")) > 255 or not EXTENSION_ID_RE.fullmatch(identifier):
+            raise OPFError("invalid extension identifier {!r}".format(identifier))
+        if not isinstance(record, dict):
+            raise OPFError("extension {!r} must be a mapping".format(identifier))
+        if set(record) != {"version", "required", "data"}:
+            raise OPFError("extension {!r} requires exactly version, required, and data".format(identifier))
+        version = record["version"]
+        if not isinstance(version, str) or not EXTENSION_VERSION_RE.fullmatch(version):
+            raise OPFError("extension {!r} version must be 1-64 printable non-space ASCII characters".format(identifier))
+        if not isinstance(record["required"], bool):
+            raise OPFError("extension {!r} required must be a boolean".format(identifier))
+        if not isinstance(record["data"], dict):
+            raise OPFError("extension {!r} data must be a mapping".format(identifier))
+        _validate_json_value(record["data"], "extension {!r} data".format(identifier), set())
 
 
 def _parse_messages(body: str) -> List[Tuple[str, str]]:
@@ -226,8 +292,52 @@ class Prompt:
         return self.metadata["id"]
 
     @property
-    def version(self) -> str:
-        return self.metadata["version"]
+    def version(self) -> Optional[str]:
+        return self.metadata.get("version")
+
+    @property
+    def extensions(self) -> Mapping[str, Any]:
+        """Return a detached copy so callers cannot mutate the parsed extension payload."""
+        return copy.deepcopy(self.metadata.get("extensions", {}))
+
+    def compatibility(
+        self,
+        *,
+        strict: bool = False,
+        supported_extensions: Optional[Mapping[str, Sequence[str]]] = None,
+    ) -> CompatibilityReport:
+        """Report extension support without changing portable-core rendering."""
+        supported = supported_extensions or {}
+        findings = []
+        for identifier, record in self.metadata.get("extensions", {}).items():
+            versions = supported.get(identifier, ())
+            if record["version"] in versions:
+                continue
+            required = record["required"]
+            findings.append(
+                CompatibilityFinding(
+                    code="extension.unsupported",
+                    severity="error" if required and strict else "warning",
+                    disposition="manual" if required else "preserved",
+                    message=(
+                        "required extension {!r} version {!r} is not supported by this consumer".format(
+                            identifier, record["version"]
+                        )
+                        if required
+                        else "optional extension {!r} version {!r} is preserved but not interpreted".format(
+                            identifier, record["version"]
+                        )
+                    ),
+                    capability=identifier,
+                )
+            )
+        return CompatibilityReport(
+            source_kind=str(self.metadata.get("format", "unknown")),
+            target_kind="opf-core",
+            findings=tuple(findings),
+            lossless=all(item.disposition == "preserved" for item in findings),
+            can_apply=not any(item.severity == "error" for item in findings),
+        )
 
     def render(self, **inputs: str) -> List[dict]:
         declared = self.metadata.get("inputs", {})

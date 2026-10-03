@@ -1,0 +1,73 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Open Prompt Format 0.3 frontmatter",
+  "description": "Parsed YAML metadata for OPF 0.3 prompt sources.",
+  "type": "object",
+  "required": ["format", "id"],
+  "properties": {
+    "format": { "const": "opf/0.3" },
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z0-9]+(?:[._-][a-z0-9]+)*$"
+    },
+    "description": { "type": "string" },
+    "tags": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "inputs": {
+      "type": "object",
+      "propertyNames": { "pattern": "^[A-Za-z_][A-Za-z0-9_]*$" },
+      "additionalProperties": {
+        "type": "object",
+        "required": ["type"],
+        "properties": {
+          "type": { "const": "string" },
+          "required": { "type": "boolean" }
+        },
+        "additionalProperties": false
+      }
+    },
+    "extensions": {
+      "type": "object",
+      "propertyNames": {
+        "type": "string",
+        "maxLength": 255,
+        "pattern": "^[a-z][a-z0-9]*(?:[.-][a-z0-9]+)+$"
+      },
+      "additionalProperties": {
+        "type": "object",
+        "required": ["version", "required", "data"],
+        "properties": {
+          "version": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "pattern": "^[!-~]+$"
+          },
+          "required": { "type": "boolean" },
+          "data": { "$ref": "#/$defs/jsonObject" }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "$defs": {
+    "jsonValue": {
+      "oneOf": [
+        { "type": "null" },
+        { "type": "boolean" },
+        { "type": "string" },
+        { "type": "number" },
+        { "type": "array", "items": { "$ref": "#/$defs/jsonValue" } },
+        { "$ref": "#/$defs/jsonObject" }
+      ]
+    },
+    "jsonObject": {
+      "type": "object",
+      "propertyNames": { "type": "string" },
+      "additionalProperties": { "$ref": "#/$defs/jsonValue" }
+    }
+  },
+  "additionalProperties": false
+}

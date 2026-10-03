@@ -1,7 +1,6 @@
 ---
-format: opf/0.1
+format: opf/0.2
 id: support.reply
-version: 1.0.0
 description: Draft a response to a customer support message.
 tags:
   - support

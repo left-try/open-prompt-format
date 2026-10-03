@@ -5,14 +5,30 @@ import { parseDocument } from "yaml";
 export type Role = "system" | "developer" | "user" | "assistant";
 export type RenderedMessage = { role: Role; content: string };
 export type InputSpec = { type: "string"; required?: boolean };
+export type JsonValue = null | boolean | number | string | JsonValue[] | { [key: string]: JsonValue };
+export type ExtensionRecord = { version: string; required: boolean; data: { [key: string]: JsonValue } };
+export type CompatibilityFinding = {
+  code: string;
+  severity: "info" | "warning" | "error";
+  disposition: "preserved" | "approximated" | "dropped" | "manual";
+  message: string;
+  capability?: string;
+};
+export type CompatibilityReport = {
+  source_kind: string;
+  target_kind: string;
+  findings: CompatibilityFinding[];
+  lossless: boolean;
+  can_apply: boolean;
+};
 export type Metadata = {
-  format: "opf/0.1";
+  format: "opf/0.1" | "opf/0.2" | "opf/0.3";
   id: string;
-  version: string;
+  version?: string;
   description?: string;
   tags?: string[];
   inputs?: Record<string, InputSpec>;
-  extensions?: Record<string, unknown>;
+  extensions?: Readonly<Record<string, unknown>>;
 };
 
 export class OPFError extends Error {
@@ -21,6 +37,8 @@ export class OPFError extends Error {
 
 const ID_RE = /^[a-z0-9]+(?:[._-][a-z0-9]+)*$/;
 const VERSION_RE = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-(?:0|[1-9]\d*|\d*[A-Za-z-][0-9A-Za-z-]*)(?:\.(?:0|[1-9]\d*|\d*[A-Za-z-][0-9A-Za-z-]*))*)?$/;
+const EXTENSION_ID_RE = /^[a-z][a-z0-9]*(?:[.-][a-z0-9]+)+$/;
+const EXTENSION_VERSION_RE = /^[!-~]{1,64}$/;
 const HEADING_RE = /^## (system|developer|user|assistant)$/;
 const VARIABLE_RE = /(?<!\\)\{\{\s*([A-Za-z_][A-Za-z0-9_]*)\s*\}\}/g;
 
@@ -35,23 +53,93 @@ function splitFrontmatter(text: string): [Record<string, unknown>, string] {
   const source = lines.slice(1, closing).join("");
   const doc = parseDocument(source, { uniqueKeys: true, schema: "core" });
   if (doc.errors.length) throw new OPFError(`invalid YAML frontmatter: ${doc.errors[0].message}`);
-  const value: unknown = doc.toJS();
+  const value: unknown = normalizeYamlValue(doc.toJS({ mapAsMap: true }), "frontmatter", new Set());
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     throw new OPFError("frontmatter must be a YAML mapping");
   }
   return [value as Record<string, unknown>, lines.slice(closing + 1).join("")];
 }
 
+function normalizeYamlValue(value: unknown, path: string, active: Set<object>): unknown {
+  if (value instanceof Map) {
+    if (active.has(value)) throw new OPFError(`${path} must not contain cyclic YAML aliases`);
+    active.add(value);
+    try {
+      const result: Record<string, unknown> = Object.create(null);
+      for (const [key, item] of value.entries()) {
+        if (typeof key !== "string") throw new OPFError(`${path} must use string mapping keys`);
+        result[key] = normalizeYamlValue(item, `${path}.${key}`, active);
+      }
+      return result;
+    } finally {
+      active.delete(value);
+    }
+  }
+  if (Array.isArray(value)) {
+    if (active.has(value)) throw new OPFError(`${path} must not contain cyclic YAML aliases`);
+    active.add(value);
+    try {
+      return value.map((item, index) => normalizeYamlValue(item, `${path}[${index}]`, active));
+    } finally {
+      active.delete(value);
+    }
+  }
+  return value;
+}
+
+function validateJsonValue(value: unknown, path: string, active: Set<object>): asserts value is JsonValue {
+  if (value === null || typeof value === "string" || typeof value === "boolean") return;
+  if (typeof value === "number") {
+    if (!Number.isFinite(value)) throw new OPFError(`${path} must not contain a non-finite number`);
+    return;
+  }
+  if (Array.isArray(value)) {
+    if (active.has(value)) throw new OPFError(`${path} must not contain cyclic YAML aliases`);
+    active.add(value);
+    value.forEach((item, index) => validateJsonValue(item, `${path}[${index}]`, active));
+    active.delete(value);
+    return;
+  }
+  if (value && typeof value === "object" && (Object.getPrototypeOf(value) === Object.prototype || Object.getPrototypeOf(value) === null)) {
+    if (active.has(value)) throw new OPFError(`${path} must not contain cyclic YAML aliases`);
+    active.add(value);
+    for (const [key, item] of Object.entries(value)) validateJsonValue(item, `${path}.${key}`, active);
+    active.delete(value);
+    return;
+  }
+  throw new OPFError(`${path} contains a value that is not JSON-compatible`);
+}
+
+function freezeJson<T>(value: T): T {
+  if (value && typeof value === "object") {
+    for (const item of Object.values(value as Record<string, unknown>)) freezeJson(item);
+    Object.freeze(value);
+  }
+  return value;
+}
+
+function cloneJson<T>(value: T): T {
+  if (Array.isArray(value)) return value.map((item) => cloneJson(item)) as T;
+  if (value && typeof value === "object") {
+    const result: Record<string, unknown> = Object.create(null);
+    for (const [key, item] of Object.entries(value)) result[key] = cloneJson(item);
+    return result as T;
+  }
+  return value;
+}
+
 function validateMetadata(value: Record<string, unknown>): asserts value is Metadata {
   const allowed = new Set(["format", "id", "version", "description", "tags", "inputs", "extensions"]);
   const unknown = Object.keys(value).filter((key) => !allowed.has(key));
   if (unknown.length) throw new OPFError(`unknown frontmatter field(s): ${unknown.join(", ")}`);
-  for (const field of ["format", "id", "version"] as const) {
+  for (const field of ["format", "id"] as const) {
     if (!(field in value)) throw new OPFError(`missing required frontmatter field: ${field}`);
   }
-  if (value.format !== "opf/0.1") throw new OPFError(`unsupported format ${String(value.format)}; expected 'opf/0.1'`);
+  if (value.format !== "opf/0.1" && value.format !== "opf/0.2" && value.format !== "opf/0.3") throw new OPFError(`unsupported format ${String(value.format)}; expected 'opf/0.1', 'opf/0.2', or 'opf/0.3'`);
+  if (value.format === "opf/0.1" && !("version" in value)) throw new OPFError("missing required frontmatter field: version");
+  if ((value.format === "opf/0.2" || value.format === "opf/0.3") && "version" in value) throw new OPFError(`${value.format} keeps release versions in the registry; remove frontmatter version`);
   if (typeof value.id !== "string" || !ID_RE.test(value.id)) throw new OPFError("id must match [a-z0-9]+(?:[._-][a-z0-9]+)*");
-  if (typeof value.version !== "string" || !VERSION_RE.test(value.version)) {
+  if (value.version !== undefined && (typeof value.version !== "string" || !VERSION_RE.test(value.version))) {
     throw new OPFError("version must be SemVer MAJOR.MINOR.PATCH without build metadata");
   }
   if (value.description !== undefined && typeof value.description !== "string") throw new OPFError("description must be a string");
@@ -60,6 +148,18 @@ function validateMetadata(value: Record<string, unknown>): asserts value is Meta
   }
   if (value.extensions !== undefined && (!value.extensions || typeof value.extensions !== "object" || Array.isArray(value.extensions))) {
     throw new OPFError("extensions must be a mapping");
+  }
+  if (value.format === "opf/0.3" && value.extensions !== undefined) {
+    for (const [identifier, rawRecord] of Object.entries(value.extensions as Record<string, unknown>)) {
+      if (Buffer.byteLength(identifier, "utf8") > 255 || !EXTENSION_ID_RE.test(identifier)) throw new OPFError(`invalid extension identifier ${JSON.stringify(identifier)}`);
+      if (!rawRecord || typeof rawRecord !== "object" || Array.isArray(rawRecord)) throw new OPFError(`extension '${identifier}' must be a mapping`);
+      const record = rawRecord as Record<string, unknown>;
+      if (Object.keys(record).sort().join(",") !== "data,required,version") throw new OPFError(`extension '${identifier}' requires exactly version, required, and data`);
+      if (typeof record.version !== "string" || !EXTENSION_VERSION_RE.test(record.version)) throw new OPFError(`extension '${identifier}' version must be 1-64 printable non-space ASCII characters`);
+      if (typeof record.required !== "boolean") throw new OPFError(`extension '${identifier}' required must be a boolean`);
+      if (!record.data || typeof record.data !== "object" || Array.isArray(record.data)) throw new OPFError(`extension '${identifier}' data must be a mapping`);
+      validateJsonValue(record.data, `extension '${identifier}' data`, new Set());
+    }
   }
   const inputs = value.inputs ?? {};
   if (!inputs || typeof inputs !== "object" || Array.isArray(inputs)) throw new OPFError("inputs must be a mapping");
@@ -152,10 +252,37 @@ export class Prompt {
     sourceDigest: string,
     path?: string,
   ) {
-    this.metadata = metadata;
+    const extensions = metadata.extensions ? freezeJson(cloneJson(metadata.extensions)) : undefined;
+    this.metadata = Object.freeze({ ...metadata, ...(extensions ? { extensions } : {}) });
     this.messages = messages;
     this.sourceDigest = sourceDigest;
     this.path = path;
+  }
+
+  compatibility(options: { strict?: boolean; supportedExtensions?: Record<string, string[]> } = {}): CompatibilityReport {
+    const findings: CompatibilityFinding[] = [];
+    const extensions = this.metadata.format === "opf/0.3" ? this.metadata.extensions ?? {} : {};
+    for (const [identifier, rawExtension] of Object.entries(extensions)) {
+      const extension = rawExtension as ExtensionRecord;
+      if ((options.supportedExtensions?.[identifier] ?? []).includes(extension.version)) continue;
+      const required = extension.required;
+      findings.push({
+        code: "extension.unsupported",
+        severity: required && options.strict ? "error" : "warning",
+        disposition: required ? "manual" : "preserved",
+        message: required
+          ? `required extension '${identifier}' version '${extension.version}' is not supported by this consumer`
+          : `optional extension '${identifier}' version '${extension.version}' is preserved but not interpreted`,
+        capability: identifier,
+      });
+    }
+    return {
+      source_kind: this.metadata.format,
+      target_kind: "opf-core",
+      findings,
+      lossless: findings.every((finding) => finding.disposition === "preserved"),
+      can_apply: findings.every((finding) => finding.severity !== "error"),
+    };
   }
 
   render(inputs: Record<string, string> = {}): RenderedMessage[] {
@@ -236,3 +363,5 @@ export async function loadCollection(collection: string): Promise<Prompt[]> {
   }
   return prompts;
 }
+
+export { Registry, LangfuseRegistry, RegisteredPrompt, PreparedPrompt, type Bundle } from "./registry.js";
