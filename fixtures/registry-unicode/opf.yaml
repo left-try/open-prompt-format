@@ -1,0 +1,5 @@
+schema: opf-registry/1
+prompts:
+  unicode.reply:
+    renderer: opf
+    source: "1"

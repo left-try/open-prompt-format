@@ -1,6 +1,6 @@
 {
   "name": "open-prompt-format",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Load and render Open Prompt Format files",
   "license": "MIT",
   "keywords": ["prompt", "llm", "prompt-format", "prompt-management"],
@@ -30,7 +30,7 @@
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",
-    "test": "node --experimental-strip-types --test test/*.test.js"
+    "test": "npm run build && node --test test/*.test.js"
   },
   "dependencies": {
     "yaml": "2.9.1"

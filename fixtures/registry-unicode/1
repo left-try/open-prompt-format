@@ -1,0 +1,10 @@
+---
+format: opf/0.2
+id: unicode.reply
+inputs:
+  name:
+    type: string
+---
+
+## user
+Привет, {{ name }} 😀

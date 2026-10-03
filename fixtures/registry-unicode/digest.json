@@ -1,0 +1,5 @@
+{
+  "config": "fixtures/registry-unicode/opf.yaml",
+  "id": "unicode.reply",
+  "bundle_digest": "sha256:0b87b9da61aa8cc840da0aa5af89b2e0a3e7536fc72284f4fb73cb0acc1cfc62"
+}

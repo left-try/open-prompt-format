@@ -5,7 +5,7 @@ import { mkdtemp, cp, rm } from "node:fs/promises";
 import os from "node:os";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
-import { OPFError, load, loadById, loadCollection, parse } from "../src/index.ts";
+import { OPFError, load, loadById, loadCollection, parse } from "../dist/index.js";
 
 const packageDir = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(packageDir, "../../..");

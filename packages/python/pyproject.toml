@@ -4,12 +4,13 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "open-prompt-format"
-version = "0.1.0"
+version = "0.2.0"
 description = "Load and render Open Prompt Format files"
 readme = "README.md"
 license = { file = "LICENSE" }
 requires-python = ">=3.10"
 dependencies = ["PyYAML>=6.0"]
+
 keywords = ["prompt", "llm", "prompt-format", "prompt-management"]
 urls = { Homepage = "https://left-try.github.io/open-prompt-format/", Repository = "https://github.com/left-try/open-prompt-format", Documentation = "https://left-try.github.io/open-prompt-format/" }
 classifiers = [
@@ -23,6 +24,9 @@ classifiers = [
   "Programming Language :: Python :: 3.13",
   "Topic :: Software Development :: Libraries :: Python Modules",
 ]
+
+[project.optional-dependencies]
+jinja = ["Jinja2>=3.1"]
 
 [project.scripts]
 opf = "opf.cli:main"
