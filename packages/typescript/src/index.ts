@@ -355,7 +355,10 @@ export async function loadCollection(collection: string): Promise<Prompt[]> {
   const prompts: Prompt[] = [];
   const seen = new Map<string, string>();
   for (const path of files) {
-    const prompt = await load(path);
+    const source = await readFile(path, "utf8");
+    const firstLine = source.replace(/^\ufeff/, "").split(/\r\n|\n|\r/, 1)[0];
+    if (firstLine !== "---") continue;
+    const prompt = parse(source, path);
     const prior = seen.get(prompt.metadata.id);
     if (prior) throw new OPFError(`duplicate prompt id '${prompt.metadata.id}': ${prior}, ${path}`);
     seen.set(prompt.metadata.id, path);

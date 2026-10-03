@@ -403,6 +403,16 @@ def load_collection(collection: str | Path) -> List[Prompt]:
     prompts: List[Prompt] = []
     seen: Dict[str, Path] = {}
     for file_path in files:
+        # Prompt collections may live beside README files and migration notes.
+        # Explicit load() remains strict; collection discovery only considers
+        # Markdown files that begin with OPF frontmatter.
+        try:
+            with file_path.open("r", encoding="utf-8") as handle:
+                first_line = handle.readline().lstrip("\ufeff").rstrip("\r\n")
+        except (OSError, UnicodeError) as exc:
+            raise OPFError("cannot read prompt file {}: {}".format(file_path, exc)) from exc
+        if first_line != "---":
+            continue
         candidate = load(file_path)
         if candidate.id in seen:
             raise OPFError(
