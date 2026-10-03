@@ -50,17 +50,17 @@ Use a current npm account with permission to publish that package name. npm trus
 3. Create and push the matching tag, for example:
 
    ```sh
-   git tag v0.1.0
-   git push origin v0.1.0
+   git tag v0.2.0
+   git push origin v0.2.0
    ```
 
 4. The tag workflow reruns CI, builds both distributions, then publishes to PyPI and npm.
 
-Do not reuse a published version. Registry releases are immutable in normal publishing workflows; use a new patch version to correct a release.
+Package tags use `vX.Y.Z` and trigger PyPI/npm publishing. Prompt release tags use `opf/<id>/vX.Y.Z`; they are created by `opf release` and do **not** trigger package publishing. Push prompt tags together with their `opf.yaml` promotion commits. Do not reuse a published version; use a new patch version to correct a package release.
 
 ## Before announcing the first release
 
 - Verify the public repo URL, Pages deployment, and package names are available and owned by the intended account.
 - Configure both trusted publishers and environments exactly as above.
 - Run the release workflow against a deliberate version tag only after the package metadata and APIs are ready.
-- Treat v0.1 as an early proposal: the format has not yet been validated by independent implementations.
+- Treat v0.2 as experimental: the local registry has integration coverage, but the Langfuse adapter still needs a live-service check and the format has not been validated by independent implementations. See [production readiness](docs/production-readiness.md).

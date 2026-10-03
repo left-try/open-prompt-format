@@ -4,6 +4,14 @@
 
 Make a prompt stored in one repository file portable across Python and TypeScript applications, with a shared parse/render contract and a practical evaluation path through Promptfoo.
 
+## Next product direction (proposal)
+
+The current v0.1/v0.2 parser and renderer are a foundation. The local Git-backed registry now has one human-maintained `opf.yaml`, Git-tagged releases verified by bundle digest, local resolution by version or channel, render receipts, portable export, and an initial explicit Langfuse publication adapter. Other provider adapters remain planned. See [the registry contract](spec/REGISTRY.md), [registry RFC](docs/registry-rfc.md), and [versioning RFC](docs/versioning-rfc.md). Model selection stays in application or deployment configuration, outside the required prompt schema.
+
+The v0.3 extension/provenance draft and local migration preview/apply commands are implemented experimentally. Current adapters are listed in the README; parity, automated validation, and independent-user review remain open before stability.
+
+Prioritize a usable Python path that can register existing `.md` and `.j2` prompts without migration. Publishing must report provider capability gaps before writing and must never silently change the meaning of a prompt. The canonical bundle must remain exportable even when a particular remote provider cannot execute it.
+
 ## Phase 0: settle the proposal
 
 - [x] Choose one-file Markdown plus YAML frontmatter.
@@ -75,12 +83,15 @@ Promptfoo supports repo-local text and JSON chat prompts, but it does not native
 
 ## Phase 6: registry drivers and release workflow
 
-- Define an optional driver interface for publishing/fetching prompt artifacts.
-- Keep Git as the canonical source for repo-first use; registry support is optional.
-- Preserve prompt ID, version, and content digest when publishing and fetching.
-- Add integrations only after a target registry and user need are identified.
+- [x] Define the single human-maintained `opf.yaml`, annotated Git release tags, channel pointers, and portable export bundles.
+- [x] Implement Python `release`, `resolve`, `verify`, and `export` against Git-tracked local files.
+- [x] Add support for registering existing Markdown/Jinja prompts and their dependencies.
+- Define an adapter interface with compatibility planning, idempotent publish, remote verification, and explicit promotion.
+- [x] Implement an initial Langfuse publish/read adapter after the local registry contract.
+- Implement an MLflow adapter after validating the Langfuse path against a live account.
+- Preserve local prompt ID, version, bundle digest, render digest, and remote mapping in publication receipts.
 
-**Deliverable:** one optional registry driver, with round-trip behavior documented.
+**Deliverable:** a fully local registry and at least one verified outbound publication path that preserves a traceable link to the local release.
 
 ## Phase 7: community validation
 
