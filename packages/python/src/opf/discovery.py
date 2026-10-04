@@ -64,7 +64,7 @@ def _classify(path: Path, relative: str, source: str) -> tuple[str, str, str] | 
     suffix = path.suffix.lower()
     name = path.name.lower()
     if suffix == ".md":
-        if re.match(r"^---\s*\n(?:(?!\n---).)*\nformat:\s*opf/0\.[123](?:\s|$)" , source, re.DOTALL):
+        if source.startswith(("---\n", "---\r\n", "---\r")) and re.search(r"(?m)^format:\s*opf/0\.[123]\s*$", source):
             return "opf", "high", "OPF format frontmatter"
         if ROLE_HEADING.search(source):
             return "markdown.chat", "high", "contains explicit role message headings"
