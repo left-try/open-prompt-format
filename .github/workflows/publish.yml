@@ -3,15 +3,29 @@ name: Publish packages
 on:
   push:
     tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      publish_python:
+        description: Publish the Python distribution to PyPI
+        type: boolean
+        required: true
+        default: true
+      publish_npm:
+        description: Publish the TypeScript package to npm
+        type: boolean
+        required: true
+        default: true
 
 permissions:
   contents: read
 
 jobs:
   checks:
+    if: github.event_name == 'push' || inputs.publish_python || inputs.publish_npm
     uses: ./.github/workflows/ci.yml
 
   publish-python:
+    if: github.event_name == 'push' || inputs.publish_python
     needs: checks
     runs-on: ubuntu-latest
     environment:
@@ -31,6 +45,7 @@ jobs:
           packages-dir: packages/python/dist/
 
   publish-npm:
+    if: github.event_name == 'push' || inputs.publish_npm
     needs: checks
     runs-on: ubuntu-latest
     environment:
