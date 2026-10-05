@@ -66,9 +66,10 @@ The TypeScript build and all five fixture-driven checks pass. Python and TypeScr
 - [x] Keep provider IDs, test cases, assertions, and eval settings in Promptfoo's own configuration.
 - [x] Ensure prompt content stays in the OPF file; avoid a second hand-maintained prompt copy.
 - [x] Configure an example eval against two providers.
+- [x] Add four deterministic support scenarios and parse-only configuration validation; this validates configuration structure, not model behavior.
 - [ ] Run an eval when provider credentials are configured.
 
-Promptfoo supports repo-local text and JSON chat prompts, but it does not natively define this frontmatter format. The adapter was exercised directly and the YAML config parses. The actual model evaluation is still pending API credentials and an explicit run because it sends paid external requests.
+Promptfoo supports repo-local text and JSON chat prompts, but it does not natively define this frontmatter format. The adapter is exercised directly, and CI parses the four-case YAML config without invoking providers. These checks validate wiring and configuration only; actual model behavior is unverified until the paid live eval runs with provider credentials.
 
 **Deliverable:** reproducible eval example using the same checked-in OPF source.
 

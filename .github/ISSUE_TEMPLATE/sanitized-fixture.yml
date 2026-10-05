@@ -1,0 +1,33 @@
+name: Submit a sanitized fixture
+description: Contribute an optional synthetic or sanitized example with explicit public-use permission.
+title: "[Fixture]: "
+labels:
+  - fixture contribution
+body:
+  - type: markdown
+    attributes:
+      value: >-
+        Remove customer data, credentials, proprietary prompts, private repository paths, and any content you do not have permission to publish.
+        Use a synthetic example where possible. Fixture sharing is optional and separate from adapter requests.
+  - type: input
+    id: source_format
+    attributes:
+      label: Source format or framework
+    validations:
+      required: true
+  - type: textarea
+    id: fixture
+    attributes:
+      label: Sanitized fixture (optional)
+      description: Share only a small synthetic or fully sanitized example.
+      render: text
+    validations:
+      required: false
+  - type: checkboxes
+    id: public_license_acknowledgement
+    attributes:
+      label: Public reuse permission
+      description: A fixture will not be used unless this box is checked.
+      options:
+        - label: I created or have permission to share this fixture, and I license this contribution for public use under the repository's MIT license.
+          required: true

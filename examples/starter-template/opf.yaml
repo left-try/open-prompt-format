@@ -1,0 +1,5 @@
+schema: opf-registry/1
+prompts:
+  starter.support.reply:
+    source: prompts/support.reply.md
+    renderer: opf

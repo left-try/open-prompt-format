@@ -23,6 +23,7 @@ def main() -> None:
     init_cmd.add_argument("--id", default="example.prompt")
     init_cmd.add_argument("--prompt", default="prompts/example.prompt.md")
     init_cmd.add_argument("--agents", choices=["auto", "yes", "no"], default="auto")
+    init_cmd.add_argument("--github", action="store_true", help="add a read-only GitHub Actions workflow")
     check_cmd = sub.add_parser("check", help="validate prompts and registry locally")
     check_cmd.add_argument("path", nargs="?", default=".")
     check_cmd.add_argument("--registry")
@@ -99,7 +100,13 @@ def main() -> None:
     args = parser.parse_args()
     try:
         if args.command == "init":
-            result = initialize(args.path, prompt_id=args.id, prompt_path=args.prompt, update_agents=args.agents != "no")
+            result = initialize(
+                args.path,
+                prompt_id=args.id,
+                prompt_path=args.prompt,
+                update_agents=args.agents != "no",
+                install_github_workflow=args.github,
+            )
             print(json.dumps(result.to_dict(), ensure_ascii=False, indent=2))
             return
         if args.command == "check":

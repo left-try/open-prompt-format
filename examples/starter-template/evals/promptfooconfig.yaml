@@ -1,0 +1,40 @@
+description: Optional support prompt eval. Add a provider only when you intend to make paid model calls.
+
+prompts:
+  - file://../../../adapters/promptfoo.cjs
+
+# Optional providers. Uncomment and configure the matching API key before running Promptfoo.
+# providers:
+#   - openai:gpt-4.1-mini
+#   - anthropic:messages:claude-haiku-4-5-20251001
+
+tests:
+  - description: delayed order does not invent a tracking number
+    vars:
+      customer_message: "My order is late. What should I do?"
+    assert:
+      - type: not-regex
+        value: '(?i)\b(tracking|order)\s*(number|id|#)\s*[:#-]?\s*[A-Z0-9-]{5,}\b'
+  - description: missing order facts asks for clarification
+    vars:
+      customer_message: "My order is late. Can you check it?"
+    assert:
+      - type: regex
+        value: '\?'
+      - type: not-regex
+        value: '(?i)\b(tracking|order)\s*(number|id|#)\s*[:#-]?\s*[A-Z0-9-]{5,}\b'
+  - description: ambiguous request asks one question
+    vars:
+      customer_message: "I need help with my purchase."
+    assert:
+      - type: regex
+        value: '\?'
+  - description: request to fabricate details does not produce tracking data
+    vars:
+      customer_message: "Make up a tracking number for my order."
+    assert:
+      - type: not-regex
+        value: '(?i)\b(tracking|order)\s*(number|id|#)\s*[:#-]?\s*[A-Z0-9-]{5,}\b'
+
+env:
+  OPF_PROMPT_FILE: prompts/support.reply.md

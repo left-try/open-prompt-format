@@ -8,13 +8,12 @@
   "publishConfig": {
     "access": "public"
   },
-  "homepage": "https://left-try.github.io/open-prompt-format/",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/left-try/open-prompt-format.git"
+    "url": "git+https://github.com/stovo-team/open-prompt-format.git"
   },
   "bugs": {
-    "url": "https://github.com/left-try/open-prompt-format/issues"
+    "url": "https://github.com/stovo-team/open-prompt-format/issues"
   },
   "type": "module",
   "engines": {

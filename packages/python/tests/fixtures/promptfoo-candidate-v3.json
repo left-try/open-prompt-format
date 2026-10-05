@@ -1,0 +1,20 @@
+{
+  "evalId": "candidate-eval-id",
+  "results": {
+    "version": 3,
+    "timestamp": "2026-10-05T00:01:00Z",
+    "stats": {"successes": 2, "failures": 1, "errors": 1},
+    "prompts": [{"raw": "PRIVATE_PROMPT"}],
+    "providers": [{"id": "openai:mock-model"}, {"id": "anthropic:mock-model"}],
+    "vars": ["PRIVATE_INPUT"],
+    "outputs": [{"output": "PRIVATE_OUTPUT", "error": "PRIVATE_ERROR"}],
+    "config": {"env": {"API_KEY": "PRIVATE_KEY"}},
+    "results": [
+      {"testIdx": 0, "promptIdx": 0, "provider": {"id": "openai:mock-model"}, "success": true, "score": 1.0, "gradingResult": {"pass": true, "score": 1.0, "reason": "PRIVATE_REASON"}},
+      {"testIdx": 0, "promptIdx": 0, "provider": {"id": "anthropic:mock-model"}, "success": false, "score": 0.0, "gradingResult": {"pass": false, "score": 0.0, "reason": "PRIVATE_REASON"}},
+      {"testIdx": 1, "promptIdx": 0, "provider": {"id": "openai:mock-model"}, "success": true, "score": 1.0, "gradingResult": {"pass": true, "score": 1.0, "reason": "PRIVATE_REASON"}},
+      {"testIdx": 1, "promptIdx": 0, "provider": {"id": "anthropic:mock-model"}, "success": false, "score": 0.0, "error": "PRIVATE_ERROR", "gradingResult": null},
+      {"testIdx": 2, "promptIdx": 0, "provider": {"id": "openai:mock-model"}, "success": true, "score": 1.0, "gradingResult": null}
+    ]
+  }
+}

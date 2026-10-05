@@ -1,0 +1,73 @@
+name: Adapter or migration request
+description: Report a source format or framework migration gap without sharing private prompt content.
+title: "[Adapter request]: "
+labels:
+  - adapter request
+body:
+  - type: markdown
+    attributes:
+      value: >-
+        Do not include private prompts, customer data, credentials, proprietary prompts, or private repository files.
+        Describe the workflow and the missing capability in your own words. Fixture sharing is optional and handled in a separate form.
+  - type: dropdown
+    id: source_format
+    attributes:
+      label: Source format
+      description: Which format or tool are you migrating from?
+      options:
+        - OpenAI prompt snapshot
+        - LangChain
+        - CrewAI
+        - AutoGen
+        - Promptfoo
+        - Other
+    validations:
+      required: true
+  - type: input
+    id: framework
+    attributes:
+      label: Framework or product
+      description: Optional name of the framework, SDK, or product.
+  - type: input
+    id: framework_version
+    attributes:
+      label: Version
+      description: Optional version of the source tool.
+  - type: dropdown
+    id: target_language
+    attributes:
+      label: Target language
+      options:
+        - Python
+        - TypeScript or JavaScript
+        - Language-neutral format
+        - Other
+    validations:
+      required: true
+  - type: dropdown
+    id: migration_outcome
+    attributes:
+      label: Migration outcome
+      options:
+        - Success
+        - Partial
+        - Blocked
+        - Not attempted
+    validations:
+      required: true
+  - type: textarea
+    id: missing_capability
+    attributes:
+      label: Missing capability or blocker
+      description: State what the workflow needs and what happened. Do not paste prompt text.
+      placeholder: I need to migrate a dynamic message template with a conditional section, but the current adapter reports it as unsupported.
+    validations:
+      required: true
+  - type: checkboxes
+    id: share_sanitized_fixture
+    attributes:
+      label: Optional fixture
+      description: Leave unchecked unless you separately decide to share a sanitized example under the fixture form.
+      options:
+        - label: I may be willing to submit a separate sanitized fixture for public reuse.
+          required: false

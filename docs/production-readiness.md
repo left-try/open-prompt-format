@@ -4,6 +4,26 @@ Status: local release workflow and both SDKs' real Git paths are exercised; exte
 
 The v0.3 specification, compatibility reports, repository scanner, migration adapters, and the new init/check/diff workflows are experimental. Their behavior requires verification before production use. Do not interpret older evidence below as verification of these additions.
 
+The GitHub consumer workflow and `opf init --github` are also experimental. The generated workflow is pinned to `stovo-team/open-prompt-format@v0.2.0` and installs `open-prompt-format==0.2.0`; it is not usable by consumer repositories until that GitHub ref and Python package are published. The package release is currently held until npm publishing and repository metadata are ready. Run the workflow contract test locally before release; do not create or push the release tag as part of this code change.
+
+The Promptfoo sample is an eval example, not verified behavior. CI parses its four test cases and deterministic assertions without calling model providers. Live behavior, provider compatibility, and cost remain unverified until the opt-in paired eval runs against real providers. Its regex checks are guardrails for this sample, not a universal quality score.
+
+The paired eval job is disabled unless `run-eval` is explicitly true. Consumer repositories must create a protected `prompt-eval` GitHub Environment with required reviewers and environment-scoped provider keys; this approval is required because caller-controlled eval configuration executes code while keys are available. Fork PRs are skipped. Each run calls every configured provider twice, and Promptfoo’s pinned `0.123.1` output is held temporarily before a sanitized comparison is written to the step summary. Raw outputs, logs, and pair files are removed. The sanitized report omits prompt text, input variables, model outputs, and detailed error payloads. Its states are `unchanged`, `regression`, `improved`, `changed`, `error`, and `ungraded`; mismatched test/provider/prompt matrices or missing baseline files stop comparison. Errors always fail; regressions fail only with `block-on-regression: true`. Ungraded outcomes remain ungraded. Model nondeterminism requires human review of regression signals, and a source diff alone does not establish behavior quality. The initial sample checks config structure locally and has no live behavior evidence.
+
+Integration requests use explicit metadata and do not collect repository data automatically. Fixture submission is separate and requires public-use permission. Use the [triage rubric](integration-request-triage.md) to weigh repeated demand, migration blockers, portability, maintainability, and rights. The deferred `okf-aget` mention remains unprioritized until its identity and workflow are known.
+
+## Starter template publication gate
+
+`examples/starter-template/` is a source example inside this repository; GitHub cannot mark a subdirectory as a template repository. Before offering one-click template creation:
+
+1. Resolve the public repository owner and package metadata, then publish the `v0.2.0` reusable-workflow ref and Python package required by the generated caller workflow.
+2. Copy the contents of `examples/starter-template/` into a dedicated starter repository and verify every relative path and issue-form link there.
+3. Run the clean-checkout Python install, `opf check`, `opf validate-collection`, and `opf verify-all` with no provider credentials. Keep the optional eval disabled in the default workflow.
+4. In the dedicated repository, open **Settings → General → Template repository** and enable the setting. This must be done manually after the checks; this code does not change GitHub repository settings.
+5. Use GitHub's **Use this template** flow once and confirm the generated repository can finish the documented quick start without maintainer help.
+
+The checked-in example passed its local no-secret smoke test, but the reusable workflow/package release is still pending and no separate starter repository exists. Do not describe it as a one-click template until all five checks pass.
+
 ## Evidence in this repository
 
 The Python CLI includes `opf init`, `opf check`, and `opf diff`. Static safety checks are advisory only. Prefix comparison describes cacheability evidence and never confirms a provider cache hit.
@@ -39,3 +59,13 @@ The migration adapters need automated coverage and review against real anonymize
 Use a non-production Langfuse project to run `PYTHONPATH=packages/python/src python3 scripts/langfuse_smoke.py` for a local preview, then set `LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY`, and optionally `LANGFUSE_BASE_URL` and run the same script with `--publish`. It creates a uniquely named test prompt, repeats publication to check idempotency, and compares local and remote rendering in both SDKs. It does not delete the test prompt. The live mode has not run because no Langfuse project and credentials are available in this workspace. The adapter stores the canonical bundle in Langfuse prompt config; provider size limits and behavior must be checked against the chosen hosted or self-hosted instance before relying on it in production.
 
 The Python `promote` command currently rewrites YAML formatting and comments. Review the generated `opf.yaml` diff before committing a promotion.
+
+## GitHub consumer workflow release gate
+
+Before recommending `opf init --github` to external repositories:
+
+- confirm `stovo-team/open-prompt-format` is the final repository owner and the `v0.2.0` ref points to a reviewed commit containing `.github/workflows/opf-check.yml`;
+- publish `open-prompt-format==0.2.0` to PyPI and verify a clean install;
+- run a clean consumer-repository test that invokes the reusable workflow with read-only `contents` permission and full Git history;
+- verify missing registries skip release verification while malformed registries and digest mismatches fail;
+- keep model credentials out of this no-secret workflow.

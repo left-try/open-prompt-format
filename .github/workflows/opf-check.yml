@@ -1,0 +1,272 @@
+name: OPF consumer checks
+
+on:
+  workflow_dispatch:
+    inputs:
+      project-path:
+        description: Path to the consumer project inside this repository.
+        type: string
+        required: true
+        default: .
+      registry:
+        description: Path to the OPF registry relative to project-path.
+        type: string
+        required: true
+        default: opf.yaml
+      opf-version:
+        description: Exact published open-prompt-format package version.
+        type: string
+        required: true
+        default: 0.2.0
+      eval-config:
+        description: Promptfoo config path relative to project-path.
+        type: string
+        required: false
+        default: evals/promptfooconfig.yaml
+      prompt-file:
+        description: OPF prompt path relative to project-path.
+        type: string
+        required: false
+        default: examples/support.reply.md
+      run-eval:
+        description: Run paired Promptfoo evaluation (provider calls may cost money).
+        type: boolean
+        required: true
+        default: false
+      base-ref:
+        description: Base commit or ref for a trusted manual comparison.
+        type: string
+        required: false
+      block-on-regression:
+        description: Fail the workflow when the comparison finds a regression.
+        type: boolean
+        required: true
+        default: false
+  workflow_call:
+    inputs:
+      project-path:
+        description: Path to the consumer project inside its repository.
+        type: string
+        required: false
+        default: .
+      registry:
+        description: Path to the OPF registry relative to project-path.
+        type: string
+        required: false
+        default: opf.yaml
+      opf-version:
+        description: Exact released open-prompt-format Python package version.
+        type: string
+        required: true
+      run-eval:
+        description: Opt in to paired Promptfoo model evaluation.
+        type: boolean
+        required: false
+        default: false
+      block-on-regression:
+        description: Fail on a measured regression.
+        type: boolean
+        required: false
+        default: false
+      eval-config:
+        description: Caller repository Promptfoo config path.
+        type: string
+        required: false
+        default: evals/promptfooconfig.yaml
+      prompt-file:
+        description: Caller repository prompt path relative to project-path.
+        type: string
+        required: false
+        default: examples/support.reply.md
+      base-ref:
+        description: Base commit or ref for trusted non-PR runs.
+        type: string
+        required: false
+
+permissions:
+  contents: read
+
+jobs:
+  opf-check:
+    name: Validate prompts and releases
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ${{ inputs.project-path }}
+    steps:
+      - name: Check out consumer repository and release tags
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install the pinned OPF package
+        env:
+          OPF_VERSION: ${{ inputs.opf-version }}
+        run: |
+          case "$OPF_VERSION" in
+            ''|*[!0-9.]* )
+              echo "opf-version must be an exact stable numeric version, such as 0.2.0" >&2
+              exit 2
+              ;;
+          esac
+          python -m pip install --disable-pip-version-check "open-prompt-format==$OPF_VERSION"
+
+      - name: Check prompt files and registry
+        id: check
+        env:
+          REGISTRY_PATH: ${{ inputs.registry }}
+        run: opf check . --registry "$REGISTRY_PATH"
+
+      - name: Verify configured release channels
+        id: verify
+        env:
+          REGISTRY_PATH: ${{ inputs.registry }}
+        run: |
+          if [ -f "$REGISTRY_PATH" ]; then
+            opf verify-all --registry "$REGISTRY_PATH"
+          else
+            echo "No OPF registry at $REGISTRY_PATH; release verification skipped."
+          fi
+
+      - name: Write workflow summary
+        if: always()
+        env:
+          CHECK_OUTCOME: ${{ steps.check.outcome }}
+          VERIFY_OUTCOME: ${{ steps.verify.outcome }}
+          REGISTRY_PATH: ${{ inputs.registry }}
+        run: |
+          {
+            echo "## OPF checks"
+            echo
+            echo "- Prompt and registry check: **$CHECK_OUTCOME**"
+            echo "- Release channel verification: **$VERIFY_OUTCOME**"
+            echo "- Registry: \`$REGISTRY_PATH\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Note that fork evaluations are skipped
+        if: inputs.run-eval && github.event.pull_request && github.event.pull_request.head.repo.full_name != github.repository
+        run: |
+          echo '## Prompt eval: skipped_no_credentials (fork pull requests do not receive provider credentials).' >> "$GITHUB_STEP_SUMMARY"
+
+  prompt-eval:
+    name: Compare base and candidate prompt behavior
+    if: inputs.run-eval && (github.event_name == 'workflow_dispatch' || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository))
+    runs-on: ubuntu-latest
+    environment:
+      name: prompt-eval
+    permissions:
+      contents: read
+    steps:
+      - name: Check out caller repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          path: caller
+
+      - name: Check out pinned OPF tooling
+        uses: actions/checkout@v4
+        with:
+          repository: stovo-team/open-prompt-format
+          ref: v0.2.0
+          path: opf-tooling
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22.6.0"
+
+      - name: Check provider credentials before running caller code
+        id: credentials
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          if [ -z "$OPENAI_API_KEY" ] && [ -z "$ANTHROPIC_API_KEY" ]; then
+            echo "available=false" >> "$GITHUB_OUTPUT"
+            echo '## Prompt eval: skipped_no_credentials (configure provider keys in the protected prompt-eval environment).' >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "available=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Prepare the same eval config for base and candidate
+        if: steps.credentials.outputs.available == 'true'
+        id: pair
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          DISPATCH_BASE_REF: ${{ inputs.base-ref || github.event.inputs.base-ref }}
+          PROMPT_FILE: ${{ inputs.prompt-file || 'examples/support.reply.md' }}
+          EVAL_CONFIG: ${{ inputs.eval-config || 'evals/promptfooconfig.yaml' }}
+          PROJECT_PATH: ${{ inputs.project-path || '.' }}
+        run: |
+          case "$PROJECT_PATH" in /*|*..* ) echo "project-path must stay inside the caller checkout" >&2; exit 2 ;; esac
+          if [ -n "$PR_BASE_SHA" ]; then BASE_REF="$PR_BASE_SHA"; else BASE_REF="$DISPATCH_BASE_REF"; fi
+          if [ -z "$BASE_REF" ]; then echo "base-ref is required outside pull_request events" >&2; exit 2; fi
+          python -m pip install --disable-pip-version-check 'PyYAML>=6.0'
+          PAIR_PATHS=$(python "$GITHUB_WORKSPACE/opf-tooling/scripts/prepare_promptfoo_pair.py" \
+            --base-ref "$BASE_REF" --prompt-file "$PROMPT_FILE" --config "$EVAL_CONFIG" \
+            --adapter-path "$GITHUB_WORKSPACE/opf-tooling/adapters/promptfoo.cjs" \
+            --repo-root "$GITHUB_WORKSPACE/caller" --project-path "$PROJECT_PATH" --output-dir "$RUNNER_TEMP/opf-pair")
+          python -c 'import json,os,sys; d=json.loads(sys.argv[1]); f=open(os.environ["GITHUB_OUTPUT"],"a"); f.write("baseline_config="+d["baseline_config"]+"\n"); f.write("candidate_config="+d["candidate_config"]+"\n"); f.close()' "$PAIR_PATHS"
+
+      - name: Install OPF Promptfoo adapter dependencies
+        if: steps.credentials.outputs.available == 'true'
+        working-directory: opf-tooling/packages/typescript
+        run: npm ci && npm run build
+
+      - name: Run paired Promptfoo evals and write sanitized comparison
+        if: steps.credentials.outputs.available == 'true'
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          BASELINE_CONFIG: ${{ steps.pair.outputs.baseline_config }}
+          CANDIDATE_CONFIG: ${{ steps.pair.outputs.candidate_config }}
+          BASELINE_COMMIT: ${{ github.event.pull_request.base.sha || inputs.base-ref || github.event.inputs.base-ref }}
+          CANDIDATE_COMMIT: ${{ github.sha }}
+          BLOCK_ON_REGRESSION: ${{ inputs.block-on-regression || github.event.inputs.block-on-regression }}
+        run: |
+          set +e
+          npx --yes promptfoo@0.123.1 eval --no-cache --no-share --no-table --output "$RUNNER_TEMP/baseline.json" -c "$BASELINE_CONFIG" > "$RUNNER_TEMP/baseline.log" 2>&1
+          npx --yes promptfoo@0.123.1 eval --no-cache --no-share --no-table --output "$RUNNER_TEMP/candidate.json" -c "$CANDIDATE_CONFIG" > "$RUNNER_TEMP/candidate.log" 2>&1
+          set -e
+          POLICY_ARGS=()
+          if [ "$BLOCK_ON_REGRESSION" = "true" ]; then POLICY_ARGS+=(--block-on-regression); fi
+          set +e
+          python "$GITHUB_WORKSPACE/opf-tooling/scripts/compare_promptfoo_results.py" \
+            --baseline "$RUNNER_TEMP/baseline.json" --candidate "$RUNNER_TEMP/candidate.json" \
+            --baseline-commit "$BASELINE_COMMIT" --candidate-commit "$CANDIDATE_COMMIT" \
+            --output "$RUNNER_TEMP/comparison.json" "${POLICY_ARGS[@]}"
+          COMPARE_EXIT=$?
+          set -e
+          if [ "$COMPARE_EXIT" -gt 1 ]; then
+            echo '## Prompt eval: error (one or both runs did not produce a comparable result set).' >> "$GITHUB_STEP_SUMMARY"
+            exit "$COMPARE_EXIT"
+          fi
+          python - <<'PY'
+          import json, os
+          report=json.load(open(os.path.join(os.environ['RUNNER_TEMP'], 'comparison.json'), encoding='utf-8'))
+          lines=['## Prompt eval comparison', '', '| Status | Regressions | Recovered | Errors |', '|---|---:|---:|---:|', '| {} | {} | {} | {} |'.format(report['status'], report['summary']['regressions'], report['summary']['recovered'], report['summary']['errors']), '', 'Sanitized per-case results are attached below. Raw Promptfoo output is temporary and is removed at job end.', '', '```json', json.dumps(report, indent=2), '```']
+          with open(os.environ['GITHUB_STEP_SUMMARY'], 'a', encoding='utf-8') as f: f.write('\n'.join(lines)+'\n')
+          PY
+          if [ "$COMPARE_EXIT" -eq 1 ]; then exit 1; fi
+
+      - name: Remove raw eval data
+        if: always()
+        env:
+          BASELINE_CONFIG: ${{ steps.pair.outputs.baseline_config }}
+          CANDIDATE_CONFIG: ${{ steps.pair.outputs.candidate_config }}
+        run: |
+          rm -f "$RUNNER_TEMP/baseline.json" "$RUNNER_TEMP/candidate.json" "$RUNNER_TEMP/baseline.log" "$RUNNER_TEMP/candidate.log"
+          rm -rf "$RUNNER_TEMP/opf-pair"
+          [ -z "$BASELINE_CONFIG" ] || rm -f "$BASELINE_CONFIG"
+          [ -z "$CANDIDATE_CONFIG" ] || rm -f "$CANDIDATE_CONFIG"

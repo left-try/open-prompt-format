@@ -30,7 +30,7 @@ class ConformanceTests(unittest.TestCase):
         prompt_dir = ROOT / "examples"
         prompt = load_by_id("support.reply", prompt_dir)
         self.assertEqual(prompt.id, "support.reply")
-        self.assertEqual(len(load_collection(prompt_dir)), 1)
+        self.assertIn("support.reply", [prompt.id for prompt in load_collection(prompt_dir)])
         with tempfile.TemporaryDirectory() as temporary:
             duplicate_dir = Path(temporary)
             shutil.copy(ROOT / "examples/support.reply.md", duplicate_dir / "first.md")

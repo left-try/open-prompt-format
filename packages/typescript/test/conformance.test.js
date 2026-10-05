@@ -29,7 +29,7 @@ test("shared invalid prompts fail parsing", async () => {
 test("collection lookup works and duplicate IDs are rejected", async () => {
   const exampleDir = path.join(root, "examples");
   assert.equal((await loadById("support.reply", exampleDir)).metadata.id, "support.reply");
-  assert.equal((await loadCollection(exampleDir)).length, 1);
+  assert.ok((await loadCollection(exampleDir)).some((prompt) => prompt.metadata.id === "support.reply"));
   const temporary = await mkdtemp(path.join(os.tmpdir(), "opf-duplicates-"));
   try {
     await cp(path.join(exampleDir, "support.reply.md"), path.join(temporary, "first.md"));

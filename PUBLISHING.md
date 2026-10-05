@@ -2,22 +2,21 @@
 
 This file records the intended public metadata and the one-time account setup needed to make releases work.
 
+## Current release readiness (2026-10-05)
+
+- **PyPI trusted publisher:** configured by the maintainer; still needs a successful first release to verify end to end.
+- **npm trusted publisher:** not ready; the maintainer reports setup problems.
+- **Repository metadata:** package repository URLs now point to `stovo-team/open-prompt-format`.
+- **Release tag:** `v0.2.0` is not published yet. The release workflow will attempt both registries; the npm job requires a working npm Trusted Publisher.
+
 ## Public project metadata
 
-- **Repository:** `left-try/open-prompt-format`
+- **Repository:** `stovo-team/open-prompt-format`
 - **Description:** A repo-first prompt format with Python and TypeScript loaders.
-- **Homepage:** <https://left-try.github.io/open-prompt-format/>
 - **License:** MIT
 - **Topics:** `prompt-engineering`, `llm`, `prompt-format`, `prompt-management`, `python`, `typescript`, `promptfoo`, `developer-tools`
 - **PyPI distribution:** `open-prompt-format`
 - **npm package:** `open-prompt-format` (public)
-
-## First-time hosting setup
-
-1. Create the public GitHub repository `left-try/open-prompt-format` and push this project.
-2. In **Settings → Pages**, select **GitHub Actions** as the build and deployment source. The workflow in `.github/workflows/pages.yml` publishes `site/`.
-3. In **Settings → Actions → General**, allow GitHub Actions to create Pages deployments. The workflow has the minimum `pages: write` and `id-token: write` permissions for deployment.
-4. Confirm the public description, homepage, and topics above on the repository.
 
 ## One-time package publisher setup
 
@@ -27,7 +26,7 @@ The release workflow publishes both packages when a `v*` tag is pushed. Configur
 
 Create the `open-prompt-format` project on PyPI (or reserve its publisher before the first upload), then configure a **Trusted Publisher** with:
 
-- Owner: `left-try`
+- Owner: `stovo-team`
 - Repository: `open-prompt-format`
 - Workflow: `publish.yml`
 - Environment: `pypi`
@@ -36,7 +35,7 @@ Create the `open-prompt-format` project on PyPI (or reserve its publisher before
 
 Create/reserve the public `open-prompt-format` package under the appropriate npm account or organization. In package settings, configure a **Trusted Publisher** for GitHub Actions with:
 
-- Organization/user: `left-try`
+- Organization/user: `stovo-team`
 - Repository: `open-prompt-format`
 - Workflow: `publish.yml`
 - Environment: `npm`
@@ -64,3 +63,4 @@ Package tags use `vX.Y.Z` and trigger PyPI/npm publishing. Prompt release tags u
 - Configure both trusted publishers and environments exactly as above.
 - Run the release workflow against a deliberate version tag only after the package metadata and APIs are ready.
 - Treat v0.2 as experimental: the local registry has integration coverage, but the Langfuse adapter still needs a live-service check and the format has not been validated by independent implementations. See [production readiness](docs/production-readiness.md).
+- Before offering a starter repository, publish the pinned reusable-workflow ref and PyPI version, then copy `examples/starter-template/` into a dedicated repository and manually enable **Settings → General → Template repository** only after the [starter template publication gate](docs/production-readiness.md#starter-template-publication-gate) passes.

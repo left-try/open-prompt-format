@@ -1,0 +1,41 @@
+name: OPF checks
+
+on:
+  workflow_dispatch:
+    inputs:
+      run-eval:
+        description: Run paid paired Promptfoo evaluation.
+        type: boolean
+        required: true
+        default: false
+      base-ref:
+        description: Base commit or ref to compare against.
+        type: string
+        required: false
+      block-on-regression:
+        description: Fail on a measured regression.
+        type: boolean
+        required: true
+        default: false
+  pull_request:
+    paths:
+      - '**/*.md'
+      - '**/*.j2'
+      - '**/opf.yaml'
+      - '.github/workflows/opf.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  opf-check:
+    uses: stovo-team/open-prompt-format/.github/workflows/opf-check.yml@v0.2.0
+    with:
+      project-path: .
+      registry: opf.yaml
+      opf-version: 0.2.0
+      run-eval: ${{ inputs.run-eval }}
+      block-on-regression: ${{ inputs.block-on-regression }}
+      eval-config: evals/promptfooconfig.yaml
+      prompt-file: prompts/support.reply.md
+      base-ref: ${{ inputs.base-ref }}

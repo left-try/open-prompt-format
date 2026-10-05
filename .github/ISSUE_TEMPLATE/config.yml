@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Read the migration support matrix
+    url: https://github.com/stovo-team/open-prompt-format/blob/main/examples/migration/README.md
+    about: Check supported inputs and known migration limits before filing a request.

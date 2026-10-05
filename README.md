@@ -2,7 +2,7 @@
 
 **A repo-first way to write, version, load, and evaluate prompts.** Keep each prompt in one readable file, commit it with your application, and load it from Python or TypeScript.
 
-[Project site](https://left-try.github.io/open-prompt-format/) · [Syntax proposal](spec/SYNTAX.md) · [OPF v0.3 draft](spec/SYNTAX-0.3.md) · [Release setup](PUBLISHING.md)
+[Syntax proposal](spec/SYNTAX.md) · [OPF v0.3 draft](spec/SYNTAX-0.3.md) · [Release setup](PUBLISHING.md)
 
 > Early proposal and experimental libraries. OPF is not yet an established industry standard.
 
@@ -50,6 +50,22 @@ opf check .
 
 `opf init` preserves existing files and only manages its marked section in `AGENTS.md`; use `--agents no` to skip agent guidance. `opf check --format json` is suitable for CI. Safety findings are heuristic advisories, not a prompt-injection guarantee.
 
+To add a read-only GitHub Actions workflow for prompt and release checks, run:
+
+```sh
+opf init . --github
+```
+
+This creates `.github/workflows/opf.yml`, which calls the pinned `stovo-team/open-prompt-format` reusable workflow. It runs `opf check` and verifies configured release channels; it does not need model API keys. The generated workflow expects the matching `v0.2.0` GitHub release and Python package to be published first. Until that release gate is complete, install the package from this checkout and run `opf check .` locally; do not treat the generated consumer workflow as live yet.
+
+### Optional paired Promptfoo eval
+
+The reusable workflow also supports a separate paid eval job. It is disabled by default. To opt in, add a `workflow_dispatch` input and pass `run-eval: true`, `prompt-file`, and `eval-config` to the reusable workflow call. Pull requests compare the base commit with the checked-out candidate using the same provider/test matrix. `block-on-regression` defaults to false; provider errors fail the job, while regressions only fail it when blocking is enabled.
+
+Before enabling it, configure a `prompt-eval` GitHub Environment in the consumer repository, add required reviewers, and store `OPENAI_API_KEY` and/or `ANTHROPIC_API_KEY` as environment secrets. The job skips fork PRs and reports `skipped_no_credentials` when no keys are available. The environment approval is the trust boundary because the eval config and prompt adapter come from the caller repository. Provider calls run twice and may incur costs. Raw output, logs, and temporary pair files are deleted; the summary omits prompt text, test inputs, model outputs, and detailed error payloads. The checked-in four-case suite is a configuration example; its behavior against live models has not been verified.
+
+Reports use `unchanged`, `regression`, `improved`, `changed`, `error`, or `ungraded` states. A valid comparison requires the same provider, prompt, and test-index matrix; missing files or a changed matrix stop the comparison. Nondeterministic model responses can change between runs, so a regression is a signal for review rather than proof that a prompt is worse. Ungraded results are not passes, and source diffs alone do not measure behavior quality.
+
 Compare a release with the current working tree:
 
 ```sh
@@ -69,6 +85,12 @@ opf migrate apply prompts/legacy.md --role system
 ```
 
 The first adapters cover plain Markdown, simple Jinja, a documented offline OpenAI snapshot JSON shape, LangChain serialized prompt templates, static CrewAI templates, and literal AutoGen `system_message` values. Framework runtime behavior, dynamic expressions, tools, and orchestration are not converted automatically. Review compatibility findings before applying; `--strict` refuses plans that drop or require manual work. See [migration examples and limits](examples/migration/README.md).
+
+## Share integration feedback
+
+Report a source format, framework, or migration blocker using the [adapter or migration request form](https://github.com/stovo-team/open-prompt-format/issues/new?template=adapter-request.yml). Do not include private prompts, customer data, credentials, or proprietary content. A sanitized fixture is optional and submitted separately through the [fixture contribution form](https://github.com/stovo-team/open-prompt-format/issues/new?template=sanitized-fixture.yml), which asks for explicit permission to publish. Requests inform prioritization but do not promise an adapter or format change; see the [triage rubric](docs/integration-request-triage.md).
+
+The [starter project](examples/starter-template/README.md) is currently a checked-in example folder, not a published GitHub template repository. See the [template publication checklist](docs/production-readiness.md#starter-template-publication-gate) before announcing a one-click template.
 
 ## Install
 
