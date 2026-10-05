@@ -31,8 +31,6 @@ class OpenAIPromptAdapter(SourceAdapter):
         if not isinstance(value, dict) or value.get("schema") != SNAPSHOT_SCHEMA:
             raise OPFError("OpenAI input must declare schema: {}".format(SNAPSHOT_SCHEMA))
         unknown = set(value) - ALLOWED_FIELDS
-        if unknown:
-            raise OPFError("unsupported OpenAI snapshot field(s): {}".format(", ".join(sorted(unknown))))
         if not isinstance(value.get("messages"), list) or not value["messages"]:
             raise OPFError("OpenAI snapshot requires an ordered messages list")
         for item in value["messages"]:
@@ -44,6 +42,7 @@ class OpenAIPromptAdapter(SourceAdapter):
         if not ID_RE.fullmatch(prompt_id):
             raise OPFError("prompt id must match [a-z0-9]+(?:[._-][a-z0-9]+)*")
         value = dict(source.data or {})
+        unknown = set(value) - ALLOWED_FIELDS
         messages = value["messages"]
         variables = value.get("variables", [])
         if isinstance(variables, dict):
@@ -59,7 +58,7 @@ class OpenAIPromptAdapter(SourceAdapter):
             body_parts.extend(["## {}".format(item["role"]), item["content"], ""])
             declared.update(VARIABLE_RE.findall(item["content"]))
         body = "\n".join(body_parts).rstrip()
-        vendor_data = {key: value[key] for key in ("tools", "text_format", "model_settings") if key in value}
+        vendor_data = {key: item for key, item in value.items() if key not in {"schema", "variables", "messages"}}
         extensions = {}
         if vendor_data:
             needs_vendor_execution = bool(vendor_data)
@@ -77,9 +76,33 @@ class OpenAIPromptAdapter(SourceAdapter):
         content = "---\n{}\n---\n\n{}".format(header, body)
         output_path = "prompts/{}.opf.md".format(prompt_id)
         generated = {output_path: content}
-        findings = [CompatibilityFinding("openai.messages.preserved", "info", "preserved", "Ordered text messages and declared variables were mapped to OPF core")]
+        findings = [CompatibilityFinding("openai.messages.preserved", "info", "preserved", "Ordered text messages and declared variables were mapped to OPF core", category="portable")]
         if vendor_data:
-            findings.append(CompatibilityFinding("openai.extensions.preserved", "warning", "preserved", "OpenAI-specific execution settings are stored in a required extension", capability="com.openai.responses"))
+            findings.append(
+                CompatibilityFinding(
+                    "openai.extensions.preserved",
+                    "warning",
+                    "preserved",
+                    "OpenAI-specific and source metadata are preserved in a required extension; target behavior still needs an OpenAI-aware consumer",
+                    capability="com.openai.responses",
+                    category="adapter_runtime",
+                    recommendation="Keep the extension and use an OpenAI-aware adapter for provider-specific settings.",
+                )
+            )
+        for field in sorted(unknown):
+            findings.append(
+                CompatibilityFinding(
+                    "metadata.preserved.extension",
+                    "warning",
+                    "preserved",
+                    "unknown OpenAI snapshot field {!r} is retained in the source extension".format(field),
+                    capability="com.openai.responses",
+                    source_path=source.relative_path,
+                    category="preserved_resource",
+                    source_field=field,
+                    recommendation="Keep the field preserved or define an explicit adapter mapping before relying on its behavior.",
+                )
+            )
         parse(content)
         report = CompatibilityReport("openai-prompt-snapshot/1", "opf/0.3", tuple(findings), True, True)
         record = {
@@ -90,7 +113,7 @@ class OpenAIPromptAdapter(SourceAdapter):
             "converter": self.converter,
             "converter_version": "0.3.0",
             "migrated_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
-            "findings": [{"code": item.code, "severity": item.severity, "disposition": item.disposition, "message": item.message} for item in findings],
+            "findings": [item.to_dict() for item in findings],
         }
         return MigrationPlan(prompt_id, source, MigrationOutput(generated, {"renderer": "opf", "source": output_path}, record), report, self.converter)
 

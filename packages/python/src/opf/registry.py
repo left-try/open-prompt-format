@@ -115,7 +115,7 @@ def _migration_manifest(value: Any) -> dict:
         if not isinstance(prompt_id, str) or not ID_RE.fullmatch(prompt_id) or not isinstance(raw, dict):
             raise OPFError("migration manifest contains an invalid prompt entry")
         required = {"source_path", "source_kind", "converter", "converter_version", "migrated_at", "findings"}
-        optional = {"source_format_version", "source_digest"}
+        optional = {"source_format_version", "source_digest", "accepted_losses"}
         if required - set(raw) or set(raw) - required - optional:
             raise OPFError("migration record for {!r} has missing or unknown fields".format(prompt_id))
         record = dict(raw)
@@ -138,20 +138,40 @@ def _migration_manifest(value: Any) -> dict:
         if not isinstance(record["findings"], list):
             raise OPFError("findings for {!r} must be a list".format(prompt_id))
         normalized_findings = []
+        data_loss_codes = set()
         for finding in record["findings"]:
-            if not isinstance(finding, dict) or set(finding) - {"code", "severity", "disposition", "message", "path"} or not {"code", "severity", "disposition", "message"} <= set(finding):
+            finding_fields = {"code", "severity", "disposition", "message", "path", "category", "source_line", "source_field", "source_path", "capability", "recommendation"}
+            if not isinstance(finding, dict) or set(finding) - finding_fields or not {"code", "severity", "disposition", "message"} <= set(finding):
                 raise OPFError("invalid migration finding for {!r}".format(prompt_id))
-            if not isinstance(finding["code"], str) or not ID_RE.fullmatch(finding["code"]):
+            code = finding.get("code")
+            loss_code = re.fullmatch(r"metadata\.value\.not_json_compatible\[[A-Za-z0-9_.-]+\]", code) if isinstance(code, str) else None
+            if not isinstance(code, str) or not (ID_RE.fullmatch(code) or loss_code):
                 raise OPFError("migration finding code for {!r} is invalid".format(prompt_id))
-            if finding["severity"] not in {"info", "warning", "error"} or finding["disposition"] not in {"preserved", "approximated", "dropped", "manual"}:
+            if not isinstance(finding["severity"], str) or finding["severity"] not in {"info", "warning", "error"} or not isinstance(finding["disposition"], str) or finding["disposition"] not in {"preserved", "approximated", "dropped", "manual"}:
                 raise OPFError("migration finding severity or disposition for {!r} is invalid".format(prompt_id))
-            if not isinstance(finding["message"], str) or ("path" in finding and not isinstance(finding["path"], str)):
+            if not isinstance(finding["message"], str):
                 raise OPFError("migration finding message or path for {!r} is invalid".format(prompt_id))
+            category = finding.get("category")
+            if category is not None and (not isinstance(category, str) or category not in {"portable", "preserved_resource", "adapter_runtime", "unsupported", "data_loss"}):
+                raise OPFError("migration finding category for {!r} is invalid".format(prompt_id))
+            for field in ("path", "source_path", "source_field", "capability", "recommendation"):
+                if field in finding and not isinstance(finding[field], str):
+                    raise OPFError("migration finding {} for {!r} is invalid".format(field, prompt_id))
+            if "source_line" in finding and (not isinstance(finding["source_line"], int) or isinstance(finding["source_line"], bool) or finding["source_line"] < 1):
+                raise OPFError("migration finding source_line for {!r} is invalid".format(prompt_id))
             item = dict(finding)
             if "path" in item:
                 item["path"] = _path(item["path"])
+            if "source_path" in item:
+                item["source_path"] = _path(item["source_path"])
+            if finding.get("category") == "data_loss":
+                data_loss_codes.add(finding["code"])
             normalized_findings.append(item)
         record["findings"] = normalized_findings
+        if "accepted_losses" in record:
+            accepted = record["accepted_losses"]
+            if not isinstance(accepted, list) or any(not isinstance(code, str) for code in accepted) or len(set(accepted)) != len(accepted) or not set(accepted) <= data_loss_codes:
+                raise OPFError("accepted_losses for {!r} must uniquely name data-loss findings".format(prompt_id))
         result["migrations"][prompt_id] = record
     return result
 

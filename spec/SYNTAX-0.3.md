@@ -13,7 +13,7 @@ This version does not standardize agent orchestration, tools, model selection, o
 
 - Existing v0.1 and v0.2 documents remain valid under their existing rules.
 - A v0.3 implementation MUST NOT reinterpret v0.1 or v0.2 files using v0.3 extension rules.
-- The v0.3 message headings, role set, input declarations, interpolation, trimming, line-ending normalization, and rendered `{role, content}` representation are unchanged from v0.2.
+- The v0.3 role set, input declarations, interpolation, trimming, line-ending normalization, and rendered `{role, content}` representation are unchanged from v0.2. The accepted role-heading spellings are defined below.
 - A v0.3 file MUST declare `format: opf/0.3` and MUST NOT declare a file-level `version`. Prompt release versions remain in the registry.
 
 ## 3. Frontmatter
@@ -51,6 +51,18 @@ Unknown extension-record fields MUST cause validation failure. Duplicate extensi
 Extension payloads MUST NOT override the semantics of core fields. For example, an extension cannot redefine the meaning of `system` or change how core inputs are interpolated. Extension namespaces MUST NOT collide with one another.
 
 The JSON Schema for this metadata contract is [frontmatter-0.3.schema.json](frontmatter-0.3.schema.json). Implementations MUST also enforce YAML duplicate-key rejection and the runtime JSON-value restrictions described below; JSON Schema validation alone does not replace those checks.
+
+### 3.1 Message headings
+
+For each core role (`system`, `developer`, `user`, and `assistant`), an exact `# role` or `## role` heading at the beginning of a line starts a message. Both spellings have identical semantics. New prompts and generated migration output SHOULD use the canonical `## role` spelling. A validator SHOULD report a non-blocking finding for each accepted single-hash role heading and recommend `## role`.
+
+Headings inside fenced code blocks remain literal. To include a recognized role heading literally outside a code block, prefix it with one backslash, for example `\# user` or `\## user`; the backslash is removed from rendered content. Other hash counts, capitalization, or trailing text do not form a role heading.
+
+### 3.2 Compatibility and portability
+
+Accepted syntax is not necessarily canonical syntax. A prompt using `# system`, `# developer`, `# user`, or `# assistant` is loadable and has the same message semantics as its `##` spelling, but a compatibility report SHOULD emit `heading.noncanonical.single_hash` (`portable`) and recommend the canonical `## role` form. Generated migration output uses `## role`.
+
+Compatibility reports distinguish `portable` core semantics, `preserved_resource` data retained in an extension or resource record, `adapter_runtime` behavior that still needs a framework runtime, `unsupported` behavior that needs manual work, and `data_loss` that blocks a write unless the exact finding is explicitly accepted. Preserving an extension does not make its payload executable or portable. Reports SHOULD identify source location and field when available, give a migration recommendation, and MUST NOT disclose source values, prompt contents, or runtime inputs.
 
 ## 4. Unknown extensions and capability handling
 

@@ -56,6 +56,7 @@ def main() -> None:
     apply_migration_cmd.add_argument("--output-dir", help="migration root for generated files (default: --root)")
     apply_migration_cmd.add_argument("--register", action="store_true", help="add the prompt and provenance to a local registry")
     apply_migration_cmd.add_argument("--registry", default="opf.yaml", help="registry path used with --register")
+    apply_migration_cmd.add_argument("--accept-loss", action="append", default=[], metavar="CODE", help="accept the named data loss (requires --register); repeat for multiple findings")
     validate = sub.add_parser("validate", help="validate a prompt file")
     validate.add_argument("file")
     validate.add_argument("--strict", action="store_true", help="fail if a required extension is unknown to the core renderer")
@@ -124,11 +125,14 @@ def main() -> None:
                         location += ":{}".format(item.line)
                         if item.column is not None:
                             location += ":{}".format(item.column)
-                    print("{} {} {}: {}".format(item.severity.upper(), item.code, location, item.message))
+                    category = " [{}]".format(item.category) if item.category else ""
+                    print("{} {}{} {}: {}".format(item.severity.upper(), item.code, category, location, item.message))
+                    if item.recommendation:
+                        print("  Recommendation: {}".format(item.recommendation))
                 errors = sum(item.severity == "error" for item in findings)
                 warnings = sum(item.severity == "warning" for item in findings)
                 print("{} error(s), {} warning(s)".format(errors, warnings))
-            if any(item.severity == "error" for item in findings) or args.strict and findings:
+            if any(item.severity == "error" for item in findings) or args.strict and any(item.severity == "warning" for item in findings):
                 raise SystemExit(2)
             return
         if args.command == "diff":
@@ -162,7 +166,7 @@ def main() -> None:
             if args.migration_action == "inspect":
                 result = plan.to_dict()
             else:
-                result = apply_migration(plan, root=args.output_dir or args.root, strict=args.strict, register=args.register, registry_path=args.registry)
+                result = apply_migration(plan, root=args.output_dir or args.root, strict=args.strict, register=args.register, registry_path=args.registry, accepted_losses=set(args.accept_loss))
             if args.format == "json":
                 print(json.dumps(result, ensure_ascii=False, indent=2))
             elif args.migration_action == "inspect":
@@ -175,7 +179,10 @@ def main() -> None:
                 if plan.output.registry_entry:
                     print("registry entry: {}".format(json.dumps(plan.output.registry_entry, ensure_ascii=False)))
                 for finding in report.findings:
-                    print("{} {} [{}]: {}".format(finding.severity.upper(), finding.code, finding.disposition, finding.message))
+                    category = " [{}]".format(finding.category) if finding.category else ""
+                    print("{} {} [{}]{}: {}".format(finding.severity.upper(), finding.code, finding.disposition, category, finding.message))
+                    if finding.recommendation:
+                        print("  Recommendation: {}".format(finding.recommendation))
                 if not report.findings:
                     print("no compatibility findings")
             else:
@@ -200,7 +207,10 @@ def main() -> None:
             else:
                 print("{} -> {} (lossless={}, can_apply={})".format(report.source_kind, report.target_kind, report.lossless, report.can_apply))
                 for finding in report.findings:
-                    print("{} {} [{}]: {}".format(finding.severity.upper(), finding.code, finding.disposition, finding.message))
+                    category = " [{}]".format(finding.category) if finding.category else ""
+                    print("{} {} [{}]{}: {}".format(finding.severity.upper(), finding.code, finding.disposition, category, finding.message))
+                    if finding.recommendation:
+                        print("  Recommendation: {}".format(finding.recommendation))
                 if not report.findings:
                     print("all extensions are supported")
             if not report.can_apply:

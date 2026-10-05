@@ -44,7 +44,7 @@ class AutoGenAdapter:
                 candidates.append(value)
         if len(candidates) != 1:
             raise OPFError("expected exactly one explicit system_message; found {}".format(len(candidates)))
-        findings = [CompatibilityFinding("autogen.runtime.excluded", "warning", "dropped", "AutoGen tools, agent runtime, and control flow are not part of this migration")]
+        findings = [CompatibilityFinding("autogen.runtime.excluded", "warning", "manual", "AutoGen tools, agent runtime, and control flow are not part of the portable prompt core", source_path=source.relative_path, category="unsupported", recommendation="Keep AutoGen orchestration in the application and migrate only the literal system message.")]
         return plan_messages(source, prompt_id, [{"role": "system", "content": candidates[0]}], converter=self.converter, source_format_version=source.source_format_version, findings=findings)
 
     def convert(self, source: SourcePrompt, plan):

@@ -55,11 +55,38 @@ def plan_migration(path: str | Path, *, root: str | Path = ".", prompt_id: str |
     return adapter.plan(source, identifier, role=role)
 
 
-def apply_migration(plan: MigrationPlan, *, root: str | Path = ".", strict: bool = False, register: bool = False, registry_path: str = "opf.yaml") -> dict[str, Any]:
+def apply_migration(
+    plan: MigrationPlan,
+    *,
+    root: str | Path = ".",
+    strict: bool = False,
+    register: bool = False,
+    registry_path: str = "opf.yaml",
+    accepted_losses: set[str] | None = None,
+) -> dict[str, Any]:
     report = plan.compatibility
-    blocked = not report.can_apply or (strict and any(f.disposition in {"dropped", "manual"} or f.severity == "error" for f in report.findings))
-    if blocked:
+    accepted = accepted_losses or set()
+    if accepted and not register:
+        raise OPFError("--accept-loss requires --register so the accepted loss is recorded in the migration manifest")
+    data_loss_codes = {finding.code for finding in report.findings if finding.category == "data_loss"}
+    unknown_acceptances = accepted - data_loss_codes
+    if unknown_acceptances:
+        raise OPFError("--accept-loss does not match a data-loss finding: {}".format(", ".join(sorted(unknown_acceptances))))
+    blocking_findings = [
+        finding
+        for finding in report.findings
+        if not (finding.category == "data_loss" and finding.code in accepted)
+        and (
+            finding.category == "data_loss"
+            or finding.severity == "error"
+            or strict and finding.disposition in {"dropped", "manual"}
+        )
+    ]
+    if blocking_findings or not report.can_apply and not data_loss_codes:
         raise OPFError("migration is not applicable under the selected compatibility policy")
+    manifest_record = dict(plan.output.manifest_record)
+    if accepted:
+        manifest_record["accepted_losses"] = sorted(accepted)
     base = Path(root).resolve()
     files = dict(plan.output.files)
     intentional_updates: set[str] = set()
@@ -107,12 +134,19 @@ def apply_migration(plan: MigrationPlan, *, root: str | Path = ".", strict: bool
         if not isinstance(manifest, dict) or manifest.get("schema") != "opf-migration-manifest/1" or not isinstance(manifest.get("migrations"), dict):
             raise OPFError("migration manifest must use schema: opf-migration-manifest/1")
         prior_record = manifest["migrations"].get(plan.prompt_id)
-        next_record = dict(plan.output.manifest_record)
+        next_record = dict(manifest_record)
         if prior_record is not None:
             identity = ("source_path", "source_digest", "converter", "converter_version")
             if not isinstance(prior_record, dict) or any(prior_record.get(key) != next_record.get(key) for key in identity):
                 raise OPFError("prompt id {} already has different migration provenance".format(plan.prompt_id))
             next_record = dict(prior_record)
+            prior_losses = set(next_record.get("accepted_losses", []))
+            current_losses = set(manifest_record.get("accepted_losses", []))
+            if prior_losses or current_losses:
+                next_record["accepted_losses"] = sorted(prior_losses | current_losses)
+                if current_losses:
+                    # Older converters may have no data-loss finding to justify this approval.
+                    next_record["findings"] = manifest_record["findings"]
         manifest["migrations"][plan.prompt_id] = next_record
         files[registry_rel.as_posix()] = yaml.safe_dump(config, allow_unicode=True, sort_keys=False)
         files[manifest_rel.as_posix()] = yaml.safe_dump(manifest, allow_unicode=True, sort_keys=False)
@@ -144,7 +178,7 @@ def apply_migration(plan: MigrationPlan, *, root: str | Path = ".", strict: bool
             destination.write_text(content, encoding="utf-8")
         except OSError as exc:
             raise OPFError("cannot write migration output {}: {}".format(relative, exc)) from exc
-    return {"prompt_id": plan.prompt_id, "written": [str(path.relative_to(base)) for path, _, _ in destinations], "manifest_record": dict(plan.output.manifest_record), "compatibility": report.to_dict()}
+    return {"prompt_id": plan.prompt_id, "written": [str(path.relative_to(base)) for path, _, _ in destinations], "manifest_record": manifest_record, "compatibility": report.to_dict()}
 
 
 def dump_plan(plan: MigrationPlan) -> str:
