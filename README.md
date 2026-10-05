@@ -86,6 +86,8 @@ opf migrate apply prompts/legacy.md --role system
 
 The first adapters cover plain Markdown, simple Jinja, a documented offline OpenAI snapshot JSON shape, LangChain serialized prompt templates, static CrewAI templates, and literal AutoGen `system_message` values. Framework runtime behavior, dynamic expressions, tools, and orchestration are not converted automatically. Review compatibility findings before applying; `--strict` refuses plans that drop or require manual work. See [migration examples and limits](examples/migration/README.md).
 
+Compatibility reporting distinguishes data that is portable in the core, preserved as an associated resource, still dependent on a framework runtime, unsupported behavior needing manual work, and explicit data loss. Both `# role` and `## role` headings are loadable for every core role; `## role` is canonical and single-hash headings are reported with a migration recommendation. Lossy migration is blocked until each exact loss code is accepted with `--accept-loss CODE` and `--register`, which records it in provenance.
+
 ## Share integration feedback
 
 Report a source format, framework, or migration blocker using the [adapter or migration request form](https://github.com/stovo-team/open-prompt-format/issues/new?template=adapter-request.yml). Do not include private prompts, customer data, credentials, or proprietary content. A sanitized fixture is optional and submitted separately through the [fixture contribution form](https://github.com/stovo-team/open-prompt-format/issues/new?template=sanitized-fixture.yml), which asks for explicit permission to publish. Requests inform prioritization but do not promise an adapter or format change; see the [triage rubric](docs/integration-request-triage.md).

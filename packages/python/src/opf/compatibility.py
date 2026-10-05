@@ -2,11 +2,19 @@
 
 from __future__ import annotations
 
+import hashlib
+import re
 from dataclasses import asdict, dataclass
 from typing import Any, Literal, Optional
 
 Severity = Literal["info", "warning", "error"]
 Disposition = Literal["preserved", "approximated", "dropped", "manual"]
+Category = Literal["portable", "preserved_resource", "adapter_runtime", "unsupported", "data_loss"]
+
+
+def data_loss_code(field: str) -> str:
+    safe_field = field if re.fullmatch(r"[A-Za-z0-9_.-]+", field) else "field-" + hashlib.sha256(field.encode("utf-8")).hexdigest()[:16]
+    return "metadata.value.not_json_compatible[{}]".format(safe_field)
 
 
 @dataclass(frozen=True)
@@ -17,6 +25,10 @@ class CompatibilityFinding:
     message: str
     capability: Optional[str] = None
     source_path: Optional[str] = None
+    category: Optional[Category] = None
+    source_line: Optional[int] = None
+    source_field: Optional[str] = None
+    recommendation: Optional[str] = None
 
     def to_dict(self) -> dict[str, Any]:
         return {key: value for key, value in asdict(self).items() if value is not None}

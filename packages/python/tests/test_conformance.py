@@ -20,6 +20,17 @@ class ConformanceTests(unittest.TestCase):
                 self.assertRegex(prompt.source_digest, r"^sha256:[0-9a-f]{64}$")
                 self.assertEqual(prompt.metadata["tags"], ["conformance", "on", "2026-10-02"])
 
+    def test_role_heading_compatibility_fixtures(self):
+        for case in FIXTURE["heading_cases"]:
+            with self.subTest(case=case["name"]):
+                prompt = parse(case["source"])
+                self.assertEqual(prompt.render(), case["expected"])
+                codes = [finding.code for finding in prompt.source_findings]
+                if case["single_hash"]:
+                    self.assertIn("heading.noncanonical.single_hash", codes)
+                else:
+                    self.assertNotIn("heading.noncanonical.single_hash", codes)
+
     def test_shared_invalid_files(self):
         for relative in FIXTURE["invalid"]:
             with self.subTest(file=relative):

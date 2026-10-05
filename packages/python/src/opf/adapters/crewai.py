@@ -9,11 +9,11 @@ from typing import Any
 
 import yaml
 
-from ..compatibility import CompatibilityFinding
+from ..compatibility import CompatibilityFinding, data_loss_code
 from ..core import OPFError
 from .base import SourcePrompt, read_source
 from .common import plan_messages
-from .markdown import ID_RE
+from .markdown import ID_RE, _json_compatible
 
 PLACEHOLDER_RE = re.compile(r"\{([A-Za-z_][A-Za-z0-9_]*)\}")
 
@@ -37,10 +37,9 @@ class CrewAIAdapter:
             raise OPFError("invalid prompt id")
         value: dict[str, Any] = (source.data or {}).get("value", {})
         known = {"role", "goal", "backstory", "system_template", "prompt_template", "custom_prompts"}
-        if set(value) - known:
-            raise OPFError("unsupported CrewAI field(s): {}".format(", ".join(sorted(set(value) - known))))
+        unknown = set(value) - known
         messages = []
-        findings = [CompatibilityFinding("crewai.orchestration.excluded", "warning", "dropped", "Agent execution, tools, and orchestration are outside the prompt format")]
+        findings = [CompatibilityFinding("crewai.orchestration.excluded", "warning", "manual", "Agent execution, tools, and orchestration are outside the portable prompt core", category="unsupported", recommendation="Keep orchestration in the application and migrate only its prompt content into OPF.")]
         for key, message_role in (("system_template", "system"), ("prompt_template", role or "user")):
             template = value.get(key)
             if template is None:
@@ -58,7 +57,17 @@ class CrewAIAdapter:
                     raise OPFError("CrewAI {} is agent configuration; provide system_template or prompt_template for migration".format(key))
             raise OPFError("CrewAI input requires system_template or prompt_template")
         extension_data = {key: value[key] for key in ("role", "goal", "backstory", "custom_prompts") if key in value}
-        extensions = {"com.crewai.agent": {"version": "1", "required": False, "data": extension_data}} if extension_data else None
+        for key in sorted(unknown):
+            extension_data[key] = value[key]
+            findings.append(CompatibilityFinding("metadata.preserved.extension", "warning", "preserved", "unknown CrewAI field {!r} is retained in the agent extension".format(key), capability="com.crewai.agent", source_path=source.relative_path, category="preserved_resource", source_field=str(key), recommendation="Keep the field preserved or define an explicit adapter mapping before relying on its behavior."))
+        preserved_data = {}
+        for key, item in extension_data.items():
+            if _json_compatible(item):
+                preserved_data[key] = item
+            else:
+                code = data_loss_code(str(key))
+                findings.append(CompatibilityFinding(code, "error", "dropped", "CrewAI field {!r} cannot be represented in a JSON-compatible OPF extension".format(key), source_path=source.relative_path, category="data_loss", source_field=str(key), recommendation="Convert this value to JSON-compatible data or explicitly accept this named loss."))
+        extensions = {"com.crewai.agent": {"version": "1", "required": True, "data": preserved_data}} if preserved_data else None
         return plan_messages(source, prompt_id, messages, converter=self.converter, source_format_version=source.source_format_version, extensions=extensions, findings=findings)
 
     def convert(self, source: SourcePrompt, plan):

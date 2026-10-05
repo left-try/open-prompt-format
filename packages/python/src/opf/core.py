@@ -6,7 +6,7 @@ import hashlib
 import copy
 import math
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple
 
@@ -28,7 +28,8 @@ VERSION_RE = re.compile(
 )
 VARIABLE_RE = re.compile(r"(?<!\\)\{\{\s*([A-Za-z_][A-Za-z0-9_]*)\s*\}\}")
 ESCAPED_OPEN_RE = re.compile(r"\\\{\{")
-HEADING_RE = re.compile(r"^## (system|developer|user|assistant)$")
+HEADING_RE = re.compile(r"^#{1,2} (system|developer|user|assistant)$")
+SINGLE_HASH_HEADING_RE = re.compile(r"^# (system|developer|user|assistant)$")
 
 
 def _unique_mapping(loader: yaml.SafeLoader, node: yaml.MappingNode, deep: bool = False) -> dict:
@@ -213,8 +214,9 @@ def _validate_extensions(extensions: dict) -> None:
         _validate_json_value(record["data"], "extension {!r} data".format(identifier), set())
 
 
-def _parse_messages(body: str) -> List[Tuple[str, str]]:
+def _parse_messages(body: str) -> Tuple[List[Tuple[str, str]], List[CompatibilityFinding]]:
     messages: List[Tuple[str, str]] = []
+    source_findings: List[CompatibilityFinding] = []
     role: Optional[str] = None
     content: List[str] = []
     fence_char: Optional[str] = None
@@ -228,7 +230,7 @@ def _parse_messages(body: str) -> List[Tuple[str, str]]:
             end -= 1
         return "\n".join(lines[start:end])
 
-    for line in re.split(r"\r\n|\r|\n", body):
+    for line_number, line in enumerate(re.split(r"\r\n|\r|\n", body), start=1):
         fence = re.match(r"^ {0,3}(`{3,}|~{3,})(.*)$", line)
         if fence:
             marker = fence.group(1)
@@ -250,19 +252,31 @@ def _parse_messages(body: str) -> List[Tuple[str, str]]:
             if role is not None:
                 messages.append((role, message_text(content)))
             role = heading.group(1)
+            if SINGLE_HASH_HEADING_RE.fullmatch(line):
+                source_findings.append(
+                    CompatibilityFinding(
+                        code="heading.noncanonical.single_hash",
+                        severity="info",
+                        disposition="preserved",
+                        message="single-hash role heading is accepted; use '## {}' as the canonical form".format(role),
+                        category="portable",
+                        source_line=line_number,
+                        recommendation="Use '## {}' as the canonical role heading.".format(role),
+                    )
+                )
             content = []
             continue
         if role is None:
             if line.strip():
                 raise OPFError("non-whitespace content appears before the first message")
             continue
-        escaped = None if fence_char else re.fullmatch(r"\\(## (?:system|developer|user|assistant))", line)
+        escaped = None if fence_char else re.fullmatch(r"\\(#{1,2} (?:system|developer|user|assistant))", line)
         content.append(escaped.group(1) if escaped else line)
     if role is not None:
         messages.append((role, message_text(content)))
     if not messages:
         raise OPFError("prompt must contain at least one message")
-    return messages
+    return messages, source_findings
 
 
 def _validate_templates(metadata: Mapping[str, Any], messages: Sequence[Tuple[str, str]]) -> None:
@@ -286,6 +300,7 @@ class Prompt:
     messages: Sequence[Tuple[str, str]]
     source_digest: str
     path: Optional[Path] = None
+    source_findings: Sequence[CompatibilityFinding] = ()
 
     @property
     def id(self) -> str:
@@ -329,8 +344,19 @@ class Prompt:
                         )
                     ),
                     capability=identifier,
+                    source_path=str(self.path) if self.path is not None else None,
+                    category="unsupported" if required else "preserved_resource",
+                    recommendation=(
+                        "Use a consumer that supports this required extension before claiming full compatibility."
+                        if required
+                        else "Confirm that the target adapter understands this preserved extension before relying on its behavior."
+                    ),
                 )
             )
+        findings = [
+            replace(finding, source_path=str(self.path) if self.path is not None else finding.source_path)
+            for finding in self.source_findings
+        ] + findings
         return CompatibilityReport(
             source_kind=str(self.metadata.get("format", "unknown")),
             target_kind="opf-core",
@@ -366,11 +392,23 @@ def parse(text: str, *, path: Optional[Path] = None) -> Prompt:
     """Parse prompt text according to OPF 0.1."""
     metadata, body = _split_frontmatter(text)
     _validate_metadata(metadata)
-    messages = _parse_messages(body)
+    messages, source_findings = _parse_messages(body)
     _validate_templates(metadata, messages)
-    normalized_source = text.replace("\r\n", "\n").replace("\r", "\n").encode("utf-8")
+    normalized_text = text.replace("\r\n", "\n").replace("\r", "\n")
+    normalized_source = normalized_text.encode("utf-8")
+    source_lines = normalized_text.removeprefix("\ufeff").split("\n")
+    closing_line_index = next(index for index, line in enumerate(source_lines[1:], start=1) if line == "---")
+    body_line_offset = closing_line_index + 1
+    source_findings = [
+        replace(
+            finding,
+            source_line=(finding.source_line or 1) + body_line_offset,
+            source_path=str(path) if path is not None else None,
+        )
+        for finding in source_findings
+    ]
     digest = "sha256:" + hashlib.sha256(normalized_source).hexdigest()
-    return Prompt(metadata=metadata, messages=messages, source_digest=digest, path=path)
+    return Prompt(metadata=metadata, messages=messages, source_digest=digest, path=path, source_findings=tuple(source_findings))
 
 
 def load(path: str | Path) -> Prompt:

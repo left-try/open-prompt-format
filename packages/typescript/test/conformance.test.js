@@ -20,6 +20,25 @@ test("shared valid prompt renders expected provider-neutral messages", async () 
   }
 });
 
+test("role heading compatibility fixtures parse both levels and preserve literals", () => {
+  for (const item of fixture.heading_cases) {
+    const prompt = parse(item.source);
+    assert.deepEqual(prompt.render(), item.expected, item.name);
+    const codes = prompt.sourceFindings.map((finding) => finding.code);
+    if (item.single_hash) assert.ok(codes.includes("heading.noncanonical.single_hash"), item.name);
+    else assert.ok(!codes.includes("heading.noncanonical.single_hash"), item.name);
+  }
+});
+
+test("compatibility report gives single-hash headings a portable recommendation and source line", () => {
+  const prompt = parse(fixture.heading_cases[0].source, "prompt.opf.md");
+  const finding = prompt.compatibility().findings[0];
+  assert.equal(finding.code, "heading.noncanonical.single_hash");
+  assert.equal(finding.category, "portable");
+  assert.equal(finding.source_line, 6);
+  assert.match(finding.recommendation, /## system/);
+});
+
 test("shared invalid prompts fail parsing", async () => {
   for (const file of fixture.invalid) {
     await assert.rejects(load(path.join(root, "fixtures", file)), OPFError);

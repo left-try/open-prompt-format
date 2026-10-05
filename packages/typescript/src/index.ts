@@ -13,6 +13,11 @@ export type CompatibilityFinding = {
   disposition: "preserved" | "approximated" | "dropped" | "manual";
   message: string;
   capability?: string;
+  source_path?: string;
+  category?: "portable" | "preserved_resource" | "adapter_runtime" | "unsupported" | "data_loss";
+  source_line?: number;
+  source_field?: string;
+  recommendation?: string;
 };
 export type CompatibilityReport = {
   source_kind: string;
@@ -39,7 +44,8 @@ const ID_RE = /^[a-z0-9]+(?:[._-][a-z0-9]+)*$/;
 const VERSION_RE = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-(?:0|[1-9]\d*|\d*[A-Za-z-][0-9A-Za-z-]*)(?:\.(?:0|[1-9]\d*|\d*[A-Za-z-][0-9A-Za-z-]*))*)?$/;
 const EXTENSION_ID_RE = /^[a-z][a-z0-9]*(?:[.-][a-z0-9]+)+$/;
 const EXTENSION_VERSION_RE = /^[!-~]{1,64}$/;
-const HEADING_RE = /^## (system|developer|user|assistant)$/;
+const HEADING_RE = /^#{1,2} (system|developer|user|assistant)$/;
+const SINGLE_HASH_HEADING_RE = /^# (system|developer|user|assistant)$/;
 const VARIABLE_RE = /(?<!\\)\{\{\s*([A-Za-z_][A-Za-z0-9_]*)\s*\}\}/g;
 
 function splitFrontmatter(text: string): [Record<string, unknown>, string] {
@@ -182,13 +188,14 @@ function trimBlankEdges(lines: string[]): string {
   return lines.slice(start, end).join("\n");
 }
 
-function parseMessages(body: string): Array<[Role, string]> {
+function parseMessages(body: string): { messages: Array<[Role, string]>; sourceFindings: CompatibilityFinding[] } {
   const messages: Array<[Role, string]> = [];
+  const sourceFindings: CompatibilityFinding[] = [];
   let role: Role | undefined;
   let content: string[] = [];
   let fenceChar: string | undefined;
   let fenceLength = 0;
-  for (const line of body.split(/\r\n|\r|\n/)) {
+  for (const [lineIndex, line] of body.split(/\r\n|\r|\n/).entries()) {
     const fence = line.match(/^ {0,3}(`{3,}|~{3,})(.*)$/);
     if (fence) {
       const marker = fence[1];
@@ -211,6 +218,17 @@ function parseMessages(body: string): Array<[Role, string]> {
     if (heading) {
       if (role) messages.push([role, trimBlankEdges(content)]);
       role = heading[1] as Role;
+      if (SINGLE_HASH_HEADING_RE.test(line)) {
+        sourceFindings.push({
+          code: "heading.noncanonical.single_hash",
+          severity: "info",
+          disposition: "preserved",
+          message: `single-hash role heading is accepted; use '## ${role}' as the canonical form`,
+          category: "portable",
+          source_line: lineIndex + 1,
+          recommendation: `Use '## ${role}' as the canonical role heading.`,
+        });
+      }
       content = [];
       continue;
     }
@@ -218,12 +236,12 @@ function parseMessages(body: string): Array<[Role, string]> {
       if (line.trim()) throw new OPFError("non-whitespace content appears before the first message");
       continue;
     }
-    const escapedHeading = fenceChar ? null : line.match(/^\\(## (?:system|developer|user|assistant))$/);
+    const escapedHeading = fenceChar ? null : line.match(/^\\(#{1,2} (?:system|developer|user|assistant))$/);
     content.push(escapedHeading ? escapedHeading[1] : line);
   }
   if (role) messages.push([role, trimBlankEdges(content)]);
   if (!messages.length) throw new OPFError("prompt must contain at least one message");
-  return messages;
+  return { messages, sourceFindings };
 }
 
 function validateTemplates(metadata: Metadata, messages: Array<[Role, string]>): void {
@@ -244,6 +262,7 @@ export class Prompt {
   readonly metadata: Metadata;
   readonly messages: ReadonlyArray<readonly [Role, string]>;
   readonly sourceDigest: string;
+  readonly sourceFindings: ReadonlyArray<CompatibilityFinding>;
   readonly path?: string;
 
   constructor(
@@ -251,16 +270,18 @@ export class Prompt {
     messages: ReadonlyArray<readonly [Role, string]>,
     sourceDigest: string,
     path?: string,
+    sourceFindings: ReadonlyArray<CompatibilityFinding> = [],
   ) {
     const extensions = metadata.extensions ? freezeJson(cloneJson(metadata.extensions)) : undefined;
     this.metadata = Object.freeze({ ...metadata, ...(extensions ? { extensions } : {}) });
     this.messages = messages;
     this.sourceDigest = sourceDigest;
+    this.sourceFindings = Object.freeze([...sourceFindings]);
     this.path = path;
   }
 
   compatibility(options: { strict?: boolean; supportedExtensions?: Record<string, string[]> } = {}): CompatibilityReport {
-    const findings: CompatibilityFinding[] = [];
+    const findings: CompatibilityFinding[] = [...this.sourceFindings];
     const extensions = this.metadata.format === "opf/0.3" ? this.metadata.extensions ?? {} : {};
     for (const [identifier, rawExtension] of Object.entries(extensions)) {
       const extension = rawExtension as ExtensionRecord;
@@ -274,6 +295,11 @@ export class Prompt {
           ? `required extension '${identifier}' version '${extension.version}' is not supported by this consumer`
           : `optional extension '${identifier}' version '${extension.version}' is preserved but not interpreted`,
         capability: identifier,
+        ...(this.path ? { source_path: this.path } : {}),
+        category: required ? "unsupported" : "preserved_resource",
+        recommendation: required
+          ? "Use a consumer that supports this required extension before claiming full compatibility."
+          : "Confirm that the target adapter understands this preserved extension before relying on its behavior.",
       });
     }
     return {
@@ -311,10 +337,18 @@ export function parse(text: string, path?: string): Prompt {
   const normalizedSource = text.replace(/\r\n?/g, "\n");
   const [metadata, body] = splitFrontmatter(normalizedSource);
   validateMetadata(metadata);
-  const messages = parseMessages(body);
-  validateTemplates(metadata, messages);
+  const parsed = parseMessages(body);
+  validateTemplates(metadata, parsed.messages);
+  const sourceLines = normalizedSource.replace(/^\uFEFF/, "").split("\n");
+  const closingLineIndex = sourceLines.findIndex((line, index) => index > 0 && line === "---");
+  const bodyLineOffset = closingLineIndex + 1;
+  const sourceFindings = parsed.sourceFindings.map((finding) => ({
+    ...finding,
+    source_line: (finding.source_line ?? 1) + bodyLineOffset,
+    ...(path ? { source_path: path } : {}),
+  }));
   const sourceDigest = `sha256:${createHash("sha256").update(normalizedSource, "utf8").digest("hex")}`;
-  return new Prompt(metadata, messages, sourceDigest, path);
+  return new Prompt(metadata, parsed.messages, sourceDigest, path, sourceFindings);
 }
 
 export async function load(path: string): Promise<Prompt> {

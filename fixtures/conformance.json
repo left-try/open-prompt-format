@@ -21,6 +21,17 @@
       ]
     }
   ],
+  "heading_cases": [
+    {"name":"system single hash","source":"---\nformat: opf/0.3\nid: heading.system.single\n---\n\n# system\nBody","expected":[{"role":"system","content":"Body"}],"single_hash":true},
+    {"name":"system double hash","source":"---\nformat: opf/0.3\nid: heading.system.double\n---\n\n## system\nBody","expected":[{"role":"system","content":"Body"}],"single_hash":false},
+    {"name":"developer single hash","source":"---\nformat: opf/0.3\nid: heading.developer.single\n---\n\n# developer\nBody","expected":[{"role":"developer","content":"Body"}],"single_hash":true},
+    {"name":"developer double hash","source":"---\nformat: opf/0.3\nid: heading.developer.double\n---\n\n## developer\nBody","expected":[{"role":"developer","content":"Body"}],"single_hash":false},
+    {"name":"user single hash","source":"---\nformat: opf/0.3\nid: heading.user.single\n---\n\n# user\nBody","expected":[{"role":"user","content":"Body"}],"single_hash":true},
+    {"name":"user double hash","source":"---\nformat: opf/0.3\nid: heading.user.double\n---\n\n## user\nBody","expected":[{"role":"user","content":"Body"}],"single_hash":false},
+    {"name":"assistant single hash","source":"---\nformat: opf/0.3\nid: heading.assistant.single\n---\n\n# assistant\nBody","expected":[{"role":"assistant","content":"Body"}],"single_hash":true},
+    {"name":"assistant double hash","source":"---\nformat: opf/0.3\nid: heading.assistant.double\n---\n\n## assistant\nBody","expected":[{"role":"assistant","content":"Body"}],"single_hash":false},
+    {"name":"ordinary and literal headings","source":"---\nformat: opf/0.3\nid: heading.literal\n---\n\n## system\n### user\n## User\n## user extra\n```md\n# assistant\n## developer\n```\n\\# user\n\\## assistant","expected":[{"role":"system","content":"### user\n## User\n## user extra\n```md\n# assistant\n## developer\n```\n# user\n## assistant"}],"single_hash":false}
+  ],
   "invalid": [
     "prompts/invalid-duplicate-key.md",
     "prompts/invalid-unknown-input.md",
