@@ -4,11 +4,9 @@ Load and render [OPF](../../README.md) prompt files from TypeScript and JavaScri
 
 ## Install
 
-```sh
-npm install open-prompt-format
-```
+The npm package is not published yet. For now, build and install from the source checkout:
 
-For the current source checkout, run `npm install` and `npm run build` in this directory, then install the directory into your application.
+Run `npm install` and `npm run build` in this directory, then install it into your application with `npm install /path/to/open-prompt-format/packages/typescript`.
 
 ## Use
 

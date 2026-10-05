@@ -4,6 +4,8 @@ Load and render [OPF](../../README.md) prompt files from Python.
 
 ## Install
 
+Version 0.2.0 is published on PyPI:
+
 ```sh
 python -m pip install open-prompt-format
 ```

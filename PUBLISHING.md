@@ -4,10 +4,10 @@ This file records the intended public metadata and the one-time account setup ne
 
 ## Current release readiness (2026-10-05)
 
-- **PyPI trusted publisher:** configured by the maintainer; still needs a successful first release to verify end to end.
+- **PyPI:** version `0.2.0` published successfully through the trusted publisher on 2026-10-05.
 - **npm trusted publisher:** not ready; the maintainer reports setup problems.
 - **Repository metadata:** package repository URLs now point to `stovo-team/open-prompt-format`.
-- **Release tag:** `v0.2.0` is not published yet. The release workflow will attempt both registries; the npm job requires a working npm Trusted Publisher.
+- **npm package:** not published. Run the release workflow with `publish_python=false` and `publish_npm=true` after its Trusted Publisher is configured.
 
 ## Public project metadata
 
@@ -20,7 +20,7 @@ This file records the intended public metadata and the one-time account setup ne
 
 ## One-time package publisher setup
 
-The release workflow publishes both packages when a `v*` tag is pushed. Configure trusted publishing before the first release; the workflow deliberately uses OIDC rather than long-lived registry tokens.
+The release workflow publishes both packages when a `v*` tag is pushed. For a registry that is not ready yet, use `workflow_dispatch` to select one package at a time. The workflow deliberately uses OIDC rather than long-lived registry tokens.
 
 ### PyPI
 
@@ -44,7 +44,7 @@ Use a current npm account with permission to publish that package name. npm trus
 
 ## Release procedure
 
-1. Update the version in `packages/python/pyproject.toml` and `packages/typescript/package.json` to the same release version.
+1. Update the version in `packages/python/pyproject.toml` and `packages/typescript/package.json` to the same release version. Never republish a version that is already present in either registry.
 2. Review the changes and ensure CI passes on the commit to release.
 3. Create and push the matching tag, for example:
 

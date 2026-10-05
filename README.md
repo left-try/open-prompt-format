@@ -94,15 +94,9 @@ The [starter project](examples/starter-template/README.md) is currently a checke
 
 ## Install
 
-The packages are prepared for their first release. Until they are published, install from a clone:
+Python 0.2.0 is available on PyPI. The npm package is not published yet.
 
 ### Python
-
-```sh
-python -m pip install ./packages/python
-```
-
-After publication:
 
 ```sh
 python -m pip install open-prompt-format
@@ -110,7 +104,7 @@ python -m pip install open-prompt-format
 
 ### TypeScript / JavaScript
 
-Build the package from the clone:
+Until the npm release is ready, build and install from a clone:
 
 ```sh
 cd packages/typescript
@@ -119,12 +113,6 @@ npm run build
 ```
 
 Then add the local package to your application with `npm install /path/to/open-prompt-format/packages/typescript`.
-
-After publication:
-
-```sh
-npm install open-prompt-format
-```
 
 ## Load and render
 
