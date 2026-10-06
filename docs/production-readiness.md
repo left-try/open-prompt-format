@@ -1,6 +1,6 @@
 # Production readiness
 
-Status: local release workflow and both SDKs' real Git paths are exercised; external publication still needs a live service check.
+Status (2026-10-06): local release, offline bundle loading, promotion/rollback, and same-channel conflict behavior are exercised. The Langfuse publish/read path passed against a self-hosted Langfuse v4 test instance. Hosted-instance behavior, deployment-specific limits, and broader production operations remain unverified.
 
 The v0.3 specification, compatibility reports, repository scanner, migration adapters, and the new init/check/diff workflows are experimental. Their behavior requires verification before production use. Do not interpret older evidence below as verification of these additions.
 
@@ -35,6 +35,12 @@ The Python CLI includes `opf init`, `opf check`, and `opf diff`. Static safety c
 - TypeScript tests cover local channel resolution, export loading, receipts, and remote digest pinning. The real Git tag resolution test passed in an unsandboxed local run (`OPF_TEST_REAL_GIT=1 npm test`, 9/9 tests). CI is configured to run that same path.
 - The Python wheel builds and imports from an isolated target directory. The npm package dry run contains `dist/index.js`, `dist/registry.js`, their declarations, and the package metadata.
 
+Manual acceptance checks on 2026-10-06 also verified:
+
+- `opf export` output loads and renders from a separate application artifact directory with no `.git` metadata.
+- Two branches promoting different versions to the same channel from the same base produce a Git merge conflict. Promoting the prior version restores the channel; production use still depends on protecting the deployment branch and reviewing promotion commits.
+- The real Langfuse smoke script created a unique prompt in a self-hosted v4 instance, repeated publication to confirm idempotency, and loaded/rendered it through Python and TypeScript using the expected bundle digest. It called no model provider and required no OpenAI API key. The test prompt remains in the test project.
+
 Run the local checks:
 
 ```sh
@@ -54,11 +60,13 @@ The team must push release tags together with promotion commits. CI checks out f
 
 ## Remaining external gate
 
+The Langfuse smoke check verifies API compatibility for one local self-hosted deployment. Hosted Langfuse configurations, provider size limits, sustained operation, and deployment-specific authentication or network policies still need validation before relying on them in production. The smoke script is opt-in and leaves its uniquely named prompt in the target project.
+
 The migration adapters need automated coverage and review against real anonymized prompt examples. The current source matrix and known limits are documented in [the migration guide](../examples/migration/README.md). OpenAI import accepts only the project's offline `openai-prompt-snapshot/1` shape; it is not a vendor API export format.
 
 Repository-scale adoption remains unverified until the adapters and findings are exercised against sanitized prompt and workflow examples from both mature repositories that motivated this work. Current tests use synthetic fixtures; they demonstrate parser and preservation behavior, not compatibility with those repositories' complete agent workflows. Preserve existing renderer execution where needed, review all `adapter_runtime`, `unsupported`, and `data_loss` findings, and migrate incrementally after comparing outputs in the source runtime.
 
-Use a non-production Langfuse project to run `PYTHONPATH=packages/python/src python3 scripts/langfuse_smoke.py` for a local preview, then set `LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY`, and optionally `LANGFUSE_BASE_URL` and run the same script with `--publish`. It creates a uniquely named test prompt, repeats publication to check idempotency, and compares local and remote rendering in both SDKs. It does not delete the test prompt. The live mode has not run because no Langfuse project and credentials are available in this workspace. The adapter stores the canonical bundle in Langfuse prompt config; provider size limits and behavior must be checked against the chosen hosted or self-hosted instance before relying on it in production.
+To repeat the Langfuse check, use a non-production instance and set `LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY`, and `LANGFUSE_BASE_URL` for that instance before running `PYTHONPATH=packages/python/src python3 scripts/langfuse_smoke.py --publish`. The adapter stores the canonical bundle in Langfuse prompt config. Langfuse prompt publication and retrieval do not invoke a model; configure a model-provider key only for a separate test that actually calls a model.
 
 The Python `promote` command currently rewrites YAML formatting and comments. Review the generated `opf.yaml` diff before committing a promotion.
 

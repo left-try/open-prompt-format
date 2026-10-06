@@ -89,6 +89,7 @@ Promptfoo supports repo-local text and JSON chat prompts, but it does not native
 - [x] Add support for registering existing Markdown/Jinja prompts and their dependencies.
 - Define an adapter interface with compatibility planning, idempotent publish, remote verification, and explicit promotion.
 - [x] Implement an initial Langfuse publish/read adapter after the local registry contract.
+- [x] Validate Langfuse publication against a live self-hosted v4 instance: repeated publication was idempotent, and Python and TypeScript loaded and rendered the remote bundle with the expected digest (2026-10-06).
 - Implement an MLflow adapter after validating the Langfuse path against a live account.
 - Preserve local prompt ID, version, bundle digest, render digest, and remote mapping in publication receipts.
 
