@@ -244,9 +244,9 @@ GitHub Actions runs the Python and TypeScript checks on pushes and pull requests
 
 This repository contains experimental v0.1/v0.2 readers, a v0.3 draft, and local registry and migration implementations. The live Promptfoo eval and independent implementations have not yet been run. The format may change before a stable release; migration adapters are intentionally limited and have not been independently validated.
 
-The [registry RFC](docs/registry-rfc.md) describes the wider direction. The local config, Git releases, channels, Python Jinja wrapper, portable export, and initial Langfuse publish/read adapter are implemented. Live remote publication and other provider adapters remain pending.
+The [registry RFC](docs/registry-rfc.md) describes the wider direction. The local config, Git releases, channels, Python Jinja wrapper, portable export, and initial Langfuse publish/read adapter are implemented. A manual check on 2026-10-06 verified exported-bundle loading without Git, rollback by promoting a prior release, conflict detection for concurrent same-channel promotions, and live publish/read against a self-hosted Langfuse v4 instance. The Langfuse check exercised prompt publication and retrieval through both SDKs; it did not call a model. Hosted Langfuse configurations, provider size limits, independent format implementations, and the live Promptfoo eval remain unverified.
 
-The [production readiness note](docs/production-readiness.md) records the checks that now run in CI and the remaining live Langfuse gate.
+The [production readiness note](docs/production-readiness.md) records the automated and manual checks, plus the remaining production-readiness gates.
 
 ## License
 

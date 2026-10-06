@@ -62,5 +62,5 @@ Package tags use `vX.Y.Z` and trigger PyPI/npm publishing. Prompt release tags u
 - Verify the public repo URL, Pages deployment, and package names are available and owned by the intended account.
 - Configure both trusted publishers and environments exactly as above.
 - Run the release workflow against a deliberate version tag only after the package metadata and APIs are ready.
-- Treat v0.2 as experimental: the local registry has integration coverage, but the Langfuse adapter still needs a live-service check and the format has not been validated by independent implementations. See [production readiness](docs/production-readiness.md).
+- Treat v0.2 as experimental: on 2026-10-06 the Langfuse adapter passed a live publish/read smoke check against one self-hosted v4 test instance. Hosted configurations, production limits, and validation by independent format implementations remain outstanding. See [production readiness](docs/production-readiness.md).
 - Before offering a starter repository, publish the pinned reusable-workflow ref and PyPI version, then copy `examples/starter-template/` into a dedicated repository and manually enable **Settings → General → Template repository** only after the [starter template publication gate](docs/production-readiness.md#starter-template-publication-gate) passes.
